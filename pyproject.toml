@@ -1,0 +1,18 @@
+[project]
+name = "mbgd-engine"
+version = "0.1.0"
+description = "A high performance MBGD engine with parallel data loading"
+authors = [
+    {name = "dly"}
+]
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "pandas (>=2.3.1,<3.0.0)",
+    "numpy (>=2.3.2,<3.0.0)"
+]
+
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
