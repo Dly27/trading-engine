@@ -9,6 +9,7 @@ from collections import deque
 from pathlib import Path
 from transforms import *
 from functools import partial
+import hashlib
 
 
 class DataSet:
@@ -131,10 +132,13 @@ class DataLoader:
         if self.shuffle:
             np.random.shuffle(self.indices)
 
-        # Creates thread if it is not alive or does not exist
-        if not self.worker_thread or self.worker_thread is None:
-            self.worker_thread = Thread(target=self.load_batches)
-            self.worker_thread.start()
+        # Stop main thread from closing while worker threads still running
+        if self.worker_thread is not None and self.worker_thread.is_alive():
+            self.worker_thread.join()
+
+        # Start new thread for new epoch
+        self.worker_thread = Thread(target=self.load_batches)
+        self.worker_thread.start()
 
         return self
 
@@ -151,7 +155,8 @@ class DataLoader:
             self.cache[key] = (x_batch, y_batch)
 
     def get_batch_cache_path(self, batch_indices):
-        id = "".join(map(str, batch_indices))
+        id = "_".join(map(str, batch_indices))
+        id = hashlib.md5(id.encode()).hexdigest()
         return os.path.join(self.cache_dir, f"{id}.npz")
 
     def save_batch_to_disk(self, x_batch, y_batch, batch_indices):
@@ -244,8 +249,12 @@ if __name__ == "__main__":
                         transforms=[Normalize(mean=0.5, std=0.2)],
                         batch_size=16,
                         workers=2,
-                        shuffle=True
+                        shuffle=False,
+                        cache_type="disk"
                         )
 
-    for x_batch, y_batch in loader:
-        print(x_batch, y_batch)
+    num_epochs = 20
+    for epoch in range(num_epochs):
+        for batch_samples, batch_labels in loader:
+            continue
+        print(f"Finished epoch {epoch + 1}")
