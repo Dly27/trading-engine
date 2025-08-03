@@ -6,6 +6,9 @@ from concurrent.futures import ProcessPoolExecutor
 from queue import Queue
 from threading import Thread
 from collections import deque
+from pathlib import Path
+from transforms import *
+from functools import partial
 
 
 class DataSet:
@@ -14,8 +17,13 @@ class DataSet:
         self.target = target
         self.y = None
         self.x = None
-
         self.load_data()
+
+    def __len__(self):
+        return len(self.x)
+
+    def __getitem__(self, item):
+        return self.x[item], self.y[item]
 
     def load_data(self):
         if isinstance(self.data, str) and os.path.isfile(self.data):
@@ -37,12 +45,6 @@ class DataSet:
 
     def load_numpy_array(self):
         self.x, self.y = self.data
-
-    def __len__(self):
-        return len(self.x)
-
-    def __getitem__(self, item):
-        return self.x[item], self.y[item]
 
 
 def load_single_batch(data, batch_indices):
@@ -91,11 +93,12 @@ class Profiler:
 class DataLoader:
     def __init__(self,
                  data,
-                 transforms=[],
+                 transforms=None,
                  shuffle=False,
                  batch_size=32,
                  workers=4,
                  max_prefetch=3,
+                 cache_type=None
                  ):
 
         self.data = data
@@ -114,6 +117,13 @@ class DataLoader:
             self.transforms = []
         else:
             self.transforms = transforms
+
+        self.cache_type = cache_type
+        self.cache = {}
+
+        if cache_type == "disk":
+            self.cache_dir = Path(".batch_cache")
+            self.cache_dir.mkdir(exist_ok=True)
 
     def __iter__(self):
         self.current_batch_index = 0
@@ -136,27 +146,62 @@ class DataLoader:
 
         return batch
 
-    def process_sample(self, sample):
-        x, y = sample
+    def cache_batch(self, key, x_batch, y_batch):
+        if self.cache_type == 'memory':
+            self.cache[key] = (x_batch, y_batch)
 
-        pipeline = Pipeline(self.transforms)
-        pipeline(x, y)
+    def get_batch_cache_path(self, batch_indices):
+        id = "".join(map(str, batch_indices))
+        return os.path.join(self.cache_dir, f"{id}.npz")
 
-        return x, y
+    def save_batch_to_disk(self, x_batch, y_batch, batch_indices):
+        path = self.get_batch_cache_path(batch_indices=batch_indices)
+        np.savez(path, x=x_batch, y=y_batch)
+
+    def batch_exists_in_disk(self, batch_indices):
+        path = self.get_batch_cache_path(batch_indices=batch_indices)
+        return os.path.exists(path)
+
+    def load_batch_from_disk(self, batch_indices):
+        path = self.get_batch_cache_path(batch_indices=batch_indices)
+        data = np.load(path)
+        return data['x'], data['y']
+
+    def get_or_process_batch(self, key, batch_indices, executor):
+        if self.cache_type == "memory" and key in self.cache:
+            return self.cache[key]
+
+        if self.cache_type == "disk" and self.batch_exists_in_disk(batch_indices=batch_indices):
+            return self.load_batch_from_disk(batch_indices=batch_indices)
+
+        samples = [self.data[i] for i in batch_indices]
+        func = partial(process_sample, transforms=self.transforms)
+        processed_samples = list(executor.map(func, samples))
+
+        x_batch = [s[0] for s in processed_samples]
+        y_batch = [s[1] for s in processed_samples]
+        x_batch = np.array(x_batch)
+        y_batch = np.array(y_batch)
+
+        if self.cache_type == "memory":
+            self.cache_batch(key, x_batch, y_batch)
+        elif self.cache_type == "disk":
+            self.save_batch_to_disk(x_batch=x_batch, y_batch=y_batch, batch_indices=batch_indices)
+
+        return x_batch, y_batch
 
     def load_batches(self):
         with ProcessPoolExecutor(max_workers=self.workers) as executor:
-            while self.current_batch_index < len(self.indices):
 
+            while self.current_batch_index < len(self.indices):
                 start_time = time.time()
                 end = min(self.current_batch_index + self.batch_size, len(self.indices))
-                batch_indices = self.indices[self.current_batch_index:end]
+                current_batch_indices = self.indices[self.current_batch_index:end]
+                key = tuple(current_batch_indices)
 
-                samples = [self.data[i] for i in batch_indices]
-                processed_samples = list(executor.map(self.process_sample, samples))
-
-                x_batch = [s[0] for s in processed_samples]
-                y_batch = [s[1] for s in processed_samples]
+                x_batch, y_batch = self.get_or_process_batch(key=key,
+                                                             batch_indices=current_batch_indices,
+                                                             executor=executor)
 
                 self.batch_queue.put((np.array(x_batch), np.array(y_batch)))
                 self.current_batch_index = end
@@ -164,6 +209,7 @@ class DataLoader:
                 end_time = time.time()
                 self.profiler.log(end_time - start_time)
 
+                # Auto tune batching
                 if self.profiler.check_to_tune(self.current_batch_index):
                     avg_time = self.profiler.mean_time()
                     if avg_time > 0.2 and self.batch_size > 4:
@@ -174,3 +220,32 @@ class DataLoader:
                     self.profiler.update_tune_counter(self.current_batch_index)
 
         self.batch_queue.put(None)
+
+
+def process_sample(sample, transforms):
+    x, y = sample
+    pipeline = Pipeline(transforms)
+    x, y = pipeline(x, y)
+    return x, y
+
+
+if __name__ == "__main__":
+
+    df = pd.DataFrame({
+        'feature1': np.random.randn(100),
+        'feature2': np.random.randn(100),
+        'feature3': np.random.randn(100),
+        'target': np.random.randint(0, 2, size=100)
+    })
+
+    data = DataSet(data=df, target='target')
+
+    loader = DataLoader(data=data,
+                        transforms=[Normalize(mean=0.5, std=0.2)],
+                        batch_size=16,
+                        workers=2,
+                        shuffle=True
+                        )
+
+    for x_batch, y_batch in loader:
+        print(x_batch, y_batch)
