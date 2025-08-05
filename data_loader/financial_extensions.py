@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 import yfinance as yf
 from base import DataSet, DataLoader, Profiler
+from numpy.lib.stride_tricks import as_strided
 
 
 class FinancialPreprocessor:
@@ -39,6 +40,7 @@ class FinancialPreprocessor:
         """
         df = data.copy()
         features_df = self.create_features(df=df, symbol=symbol)
+        features_df['symbol'] = symbol
 
         if self.target_type == "returns":
             features_df["target"] = df["Close"].pct_change()
@@ -69,17 +71,18 @@ class FinancialPreprocessor:
 
             symbol_features = self.create_features(symbol_data, symbol)
             symbol_features['symbol'] = symbol
+
             all_features.append(symbol_features)
 
         combined_df = pd.concat(all_features, ignore_index=True)
 
         if self.target_type == 'returns':
-            combined_df['target'] = combined_df.groupby('symbol')['Close'].pct_change()
+            combined_df['target'] = combined_df.groupby('symbol')['close'].pct_change()
         elif self.target_type == 'next_close':
-            combined_df['target'] = combined_df.groupby('symbol')['Close'].shift(-1)
+            combined_df['target'] = combined_df.groupby('symbol')['close'].shift(-1)
         elif self.target_type == 'price_direction':
-            combined_df['target'] = (combined_df.groupby('symbol')['Close'].shift(-1) >
-                                     combined_df['Close']).astype(int)
+            combined_df['target'] = (combined_df.groupby('symbol')['close'].shift(-1) >
+                                     combined_df['close']).astype(int)
 
         combined_df = combined_df.dropna()
         return combined_df
@@ -88,22 +91,22 @@ class FinancialPreprocessor:
         features = pd.DataFrame(index=df.index)
 
         # Price features
-        features[f"open_{symbol}"] = df["Open"]
-        features[f"high_{symbol}"] = df["High"]
-        features[f"close_{symbol}"] = df["Close"]
-        features[f"low_{symbol}"] = df["Low"]
-        features[f"volume_{symbol}"] = df["Volume"]
+        features["open"] = df["Open"]
+        features["high"] = df["High"]
+        features["close"] = df["Close"]
+        features["low"] = df["Low"]
+        features["volume"] = df["Volume"]
 
         # Technical indicatiors
-        features[f"sma_5_{symbol}"] = df["Close"].rolling(window=5).mean()
-        features[f"sma_20_{symbol}"] = df["Close"].rolling(window=20).mean()
-        features[f"volatility_20_{symbol}"] = df["Close"].rolling(window=20).std()
-        features[f"rsi_{symbol}"] = self.calculate_rsi(prices=df["Close"], window=14)
+        features["sma_5"] = df["Close"].rolling(window=5).mean()
+        features["sma_20"] = df["Close"].rolling(window=20).mean()
+        features["volatility_20"] = df["Close"].rolling(window=20).std()
+        features["rsi"] = self.calculate_rsi(prices=df["Close"], window=14)
 
         # Lag features
         for lag in [1, 7, 14, 30]:
-            features[f'close_lag_{lag}_{symbol}'] = df['Close'].shift(lag)
-            features[f'volume_lag_{lag}_{symbol}'] = df['Volume'].shift(lag)
+            features[f'close_lag_{lag}'] = df['Close'].shift(lag)
+            features[f'volume_lag_{lag}'] = df['Volume'].shift(lag)
 
         return features
 
@@ -171,14 +174,14 @@ class FinancialDataSet(DataSet):
         if lookback is None:
             lookback = (as_of_date - start_date).days
 
-        mask = df.index <= as_of_date
+        mask = pd.to_datetime(df.index) <= as_of_date
         pit_data = df[mask]
 
         if lookback and len(pit_data) > lookback:
             pit_data = pit_data.tail(lookback)
 
         return FinancialDataSet(data=pit_data,
-                                start_date=as_of_date-pd.Timedelta(days=lookback),
+                                start_date=as_of_date - pd.Timedelta(days=lookback),
                                 end_date=as_of_date,
                                 symbols=self.symbols,
                                 lookback=lookback)
@@ -194,16 +197,26 @@ class FinancialDataSet(DataSet):
         if window_size > self.lookback:
             raise ValueError("Window size cannot be greater than the lookback")
 
-        sequences = []
-        targets = []
+        numeric_cols = [col for col in self.data.columns if col not in ['symbol', 'target']]
 
-        for i in range(window_size, len(self.data) - forecast_horizon):
-            sequence = self.data.iloc[i-window_size:i].values
-            target = self.data.iloc[i+forecast_horizon]["target"]
-            sequences.append(sequence)
-            targets.append(target)
+        # Vectorise windows using strid_tricks
+        data = self.data[numeric_cols].values
+        target_array = self.data['target'].values
+        n_samples = len(data)
+        n_windows = n_samples - window_size - forecast_horizon + 1
+
+        if n_windows <= 0:
+            raise ValueError(f"Not enough data points. Need at least {window_size + forecast_horizon} points, but have {n_samples}")
+
+        n_samples, n_features = data.shape
+        n_windows = n_samples - window_size - forecast_horizon + 1
+        shape = (n_windows, window_size, n_features)
+        strides = (data.strides[0], data.strides[0], data.strides[1])
+        sequences = as_strided(data, shape=shape, strides=strides)
+        targets = target_array[window_size + forecast_horizon - 1:window_size + forecast_horizon - 1 + n_windows]
 
         return DataSet(data=(sequences, targets), target=None)  # DataSet.load_numpy_array doesn't need a target
+
 
 class FinancialDataLoader(DataLoader):
     def __init__(self, data, **kwargs):
@@ -219,7 +232,6 @@ if __name__ == "__main__":
                             start_date="2024-01-01",
                             end_date="2025-08-01",
                             target_type="returns")
-
 
     print(f"Dataset length: {len(data)}")
     print(f"Feature columns: {data.data.columns.tolist()}")
