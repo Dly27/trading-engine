@@ -199,7 +199,7 @@ class FinancialDataSet(DataSet):
 
         numeric_cols = [col for col in self.data.columns if col not in ['symbol', 'target']]
 
-        # Vectorise windows using strid_tricks
+        # Vectorise windows using stride_tricks
         data = self.data[numeric_cols].values
         target_array = self.data['target'].values
         n_samples = len(data)

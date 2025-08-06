@@ -7,7 +7,7 @@ from queue import Queue
 from threading import Thread
 from collections import deque
 from pathlib import Path
-from transforms import *
+from data_loader.transforms import *
 from functools import partial
 import hashlib
 
@@ -99,7 +99,8 @@ class DataLoader:
                  batch_size=32,
                  workers=4,
                  max_prefetch=3,
-                 cache_type=None
+                 cache_type=None,
+                 auto_tune=False
                  ):
 
         self.data = data
@@ -113,6 +114,7 @@ class DataLoader:
         self.batch_queue = Queue(self.max_prefetch)
         self.worker_thread = None
         self.profiler = Profiler()
+        self.auto_tune = auto_tune
 
         if transforms is None:
             self.transforms = []
@@ -195,6 +197,16 @@ class DataLoader:
 
         return x_batch, y_batch
 
+    def auto_tune_batching(self):
+        if self.profiler.check_to_tune(self.current_batch_index):
+            avg_time = self.profiler.mean_time()
+            if avg_time > 0.2 and self.batch_size > 4:
+                self.batch_size = max(4, self.batch_size // 2)
+            elif avg_time < 0.05 and self.batch_size < 256:
+                self.batch_size = self.batch_size * 2
+
+            self.profiler.update_tune_counter(self.current_batch_index)
+
     def load_batches(self):
         with ProcessPoolExecutor(max_workers=self.workers) as executor:
 
@@ -214,15 +226,10 @@ class DataLoader:
                 end_time = time.time()
                 self.profiler.log(end_time - start_time)
 
-                # Auto tune batching
-                if self.profiler.check_to_tune(self.current_batch_index):
-                    avg_time = self.profiler.mean_time()
-                    if avg_time > 0.2 and self.batch_size > 4:
-                        self.batch_size = max(4, self.batch_size // 2)
-                    elif avg_time < 0.05 and self.batch_size < 1024:
-                        self.batch_size = self.batch_size * 2
+                if self.auto_tune:
+                    self.auto_tune_batching()
 
-                    self.profiler.update_tune_counter(self.current_batch_index)
+
 
         self.batch_queue.put(None)
 
