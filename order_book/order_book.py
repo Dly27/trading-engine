@@ -1,9 +1,5 @@
-from queue import Queue
-from dataclasses import dataclass
-import sys
 from collections import OrderedDict
-
-sys.setrecursionlimit(400_000)
+from typing import Literal
 
 
 class Node:
@@ -132,9 +128,6 @@ class RedBlackTree:
 
         self.root.colour = "black"
 
-    def delete_price(self):
-        pass
-
     def search_price(self, price):
         current = self.root
 
@@ -149,7 +142,10 @@ class RedBlackTree:
 
         return None
 
-    def get_max_price(self):
+    def get_best_bid(self):
+        if self.type != "bids":
+            raise ValueError("INVALID: THIS IS FOR BIDS")
+
         if self.root is None:
             return None
 
@@ -158,9 +154,13 @@ class RedBlackTree:
         while current.right is not None:
             current = current.right
 
-        return current.price
+        first_order_id = next(iter(current.values))
+        return current.values[first_order_id]
 
-    def get_min_price(self):
+    def get_best_ask(self):
+        if self.type != "asks":
+            raise ValueError("INVALID: THIS IS FOR ASKS")
+
         if self.root is None:
             return None
 
@@ -169,25 +169,20 @@ class RedBlackTree:
         while current.left is not None:
             current = current.left
 
-        return current.price
+        first_order_id = next(iter(current.values))
+        return current.values[first_order_id]
 
-    def get_best_bid(self):
-        if self.type != "bids":
-            raise ValueError("INVALID: THIS IS FOR BIDS")
 
-        return self.get_max_price()
-
-    def get_best_ask(self):
-        if self.type != "asks":
-            raise ValueError("INVALID: THIS IS FOR ASKS")
-
-        return self.get_min_price()
-
-@dataclass
 class Order:
-    order_id: str
-    order_type: str
-    order_price: int
+    def __init__(self, order_id: str, order_type: Literal["ask", "bid"], order_price: int):
+        self.order_id = order_id
+        self.order_price = order_price
+
+        if order_type != "ask" and order_type != "bid":
+            raise ValueError("INVALID ORDER TYPE")
+        else:
+            self.order_type = order_type
+
 
 class OrderBook:
     def __init__(self):
@@ -195,24 +190,28 @@ class OrderBook:
         self.bids = RedBlackTree(type="bids")
         self.order_id_map = {}
 
-    def add_bid(self, price, order):
-        price_node = self.bids.search_price(price=price)
+    def add_order(self, order):
+        if order.order_type == "ask":
+            price_node = self.asks.add_price(order.order_price)  # Create new price level
+            price_node.values[order.order_id] = order
+            self.order_id_map[order.order_id] = price_node
 
-        if not price_node:
-            self.bids.add_price(price)  # Create new price level
+        elif order.order_type == "bid":
+            price_node = self.bids.add_price(order.order_price)  # Create new price level
+            price_node.values[order.order_id] = order
+            self.order_id_map[order.order_id] = price_node
 
-        price_node.values[order.order_id] = order
-        self.order_id_map[order.order_id] = price_node
+    def cancel_order(self, order_id):
+        price_node = self.order_id_map.get(order_id)
 
-    def add_ask(self, price, order):
-        price_node = self.asks.search_price(price=price)
+        if price_node is None:
+            raise  ValueError(f"ORDER {order_id} NOT FOUND")
 
-        if not price_node:
-            self.asks.add_price(price)  # Create new price level
-
-        price_node.values[order.order_id] = order
-        self.order_id_map[order.order_id] = price_node
-
+        if order_id not in price_node.values:
+            raise ValueError(f"ORDER {order_id} NOT FOUND")
+        else:
+            del price_node.values[order_id]
+            del self.order_id_map[order_id]
 
     def get_best_bid(self):
         return self.bids.get_best_bid()
@@ -227,7 +226,7 @@ class OrderBook:
         if best_bid is None or best_ask is None:
             return None
 
-        return best_ask - best_bid
+        return best_ask.order_price - best_bid.order_price
 
 
 if __name__ == "__main__":
@@ -236,14 +235,15 @@ if __name__ == "__main__":
     # Add bids and asks
     counter = 0
     for price in [10, 10, 20, 30, 40, 40]:
-        book.add_bid(price=price, order_id=counter)
+        order = Order(order_id=str(counter), order_type="bid", order_price=price)
+        book.add_order(order=order)
         counter += 1
 
-    counter = 0
     for price in [50, 51, 52, 60, 70, 80]:
-        book.add_ask(price=price, order_id=counter)
+        order = Order(order_id=str(counter), order_type="ask", order_price=price)
+        book.add_order(order=order)
         counter += 1
 
     print(f"Spread: {book.get_spread()}")
-    print(f"Best bid: {book.get_best_bid()}")
-    print(f"Best ask: {book.get_best_ask()}")
+    print(f"Best bid: {book.get_best_bid().order_price}")
+    print(f"Best ask: {book.get_best_ask().order_price}")
