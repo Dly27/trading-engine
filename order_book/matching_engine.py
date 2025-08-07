@@ -5,13 +5,19 @@ class MatchingEngine:
         self.trades = []
 
     def process_order(self, order):
+        """
+        Matches the order with another order and executes the trade
+        """
         if order.side == "ask":
             self.process_sell_order(order=order)
         else:
             self.process_buy_order(order=order)
 
     def process_buy_order(self, order):
-
+        """
+        Constantly performs trades until all instruments required are bought or
+        stops if an ask cannot be found
+        """
         while order.quantity > 0:
             best_ask = self.order_book.get_best_ask()
 
@@ -30,6 +36,10 @@ class MatchingEngine:
             self.order_book.add_order(order)
 
     def process_sell_order(self, order):
+        """
+        Constantly performs trades until all instruments required are sold or
+        stops if a bid cannot be found
+        """
         while order.quantity > 0:
             best_bid = self.order_book.get_best_bid()
 
@@ -48,6 +58,10 @@ class MatchingEngine:
             self.order_book.add_order(order)
 
     def match_possible(self, buy_order=None, sell_order=None):
+        """
+        Check if a trade can be executed
+        Always returns true if there either order is a market order
+        """
         if sell_order is None or buy_order is None:
             raise ValueError("BUY OR SELL ORDER NOT SPECIFIED")
 
@@ -57,6 +71,11 @@ class MatchingEngine:
         return buy_order.order_price >= sell_order.order_price
 
     def execute_trade(self, buy_order, sell_order):
+        """
+        Adjusts the remaining quantity of an order
+        Removes the order from order book if order is completed
+        Add trade to trade tracker
+        """
         trade_quantity = min(buy_order.quantity, sell_order.quantity)
 
         if trade_quantity <= 0:
@@ -84,6 +103,9 @@ class MatchingEngine:
         return trade
 
     def get_trade_price(self, buy_order, sell_order):
+        """
+        Returns the price of an order
+        """
         if buy_order.order_kind == "market":
             return sell_order.order_price
         if sell_order.order_kind == "market":

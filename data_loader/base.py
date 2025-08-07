@@ -48,23 +48,14 @@ class DataSet:
         self.x, self.y = self.data
 
 
-def load_single_batch(data, batch_indices):
-    x_batch = []
-    y_batch = []
-
-    for i in batch_indices:
-        x, y = data[i]
-        x_batch.append(x)
-        y_batch.append(y)
-
-    return np.array(x_batch), np.array(y_batch)
-
-
 class Pipeline:
     def __init__(self, transforms):
         self.transforms = transforms
 
     def __call__(self, x, y):
+        """
+        Applies transforms when pipeline object called
+        """
         for transform in self.transforms:
             x, y = transform(x, y)
 
@@ -79,12 +70,27 @@ class Profiler:
         self.last_tune_counter = 0
 
     def log(self, time):
+        """
+        Add batch time to log to keep track
+        :param time:
+        :return:
+        """
         self.batch_times.append(time)
 
     def check_to_tune(self, current_batch_index):
+        """
+        Tunes batch size if frequency is reached
+        :param current_batch_index:
+        :return:
+        """
         return current_batch_index - self.last_tune_counter >= self.tune_freq
 
     def update_tune_counter(self, current_batch_index):
+        """
+        Sets the counter to the current batch index
+        :param current_batch_index:
+        :return:
+        """
         self.last_tune_counter = current_batch_index
 
     def mean_time(self):
@@ -129,6 +135,12 @@ class DataLoader:
             self.cache_dir.mkdir(exist_ok=True)
 
     def __iter__(self):
+        """
+        Sets current batch index to 0
+        Shuffles batches
+        Starts or continues thread
+        :return:
+        """
         self.current_batch_index = 0
 
         if self.shuffle:
@@ -145,6 +157,9 @@ class DataLoader:
         return self
 
     def __next__(self):
+        """
+        Returns the batch first in the queue
+        """
         batch = self.batch_queue.get()
 
         if batch is None:
@@ -153,28 +168,56 @@ class DataLoader:
         return batch
 
     def cache_batch(self, key, x_batch, y_batch):
+        """
+
+        :param key:
+        :param x_batch:
+        :param y_batch:
+        :return:
+        """
         if self.cache_type == 'memory':
             self.cache[key] = (x_batch, y_batch)
 
     def get_batch_cache_path(self, batch_indices):
+        """
+        Creates a path for where the current batch will be stored in disk
+        :param batch_indices: Inidices of  processed batch to store
+        :return: Path to processed batch
+        """
         id = "_".join(map(str, batch_indices))
         id = hashlib.md5(id.encode()).hexdigest()
         return os.path.join(self.cache_dir, f"{id}.npz")
 
     def save_batch_to_disk(self, x_batch, y_batch, batch_indices):
+        """
+        Saves the processed batch to disk indicated by its hashed indices
+        """
         path = self.get_batch_cache_path(batch_indices=batch_indices)
         np.savez(path, x=x_batch, y=y_batch)
 
     def batch_exists_in_disk(self, batch_indices):
+        """
+        Check whether the current batch is in disk
+        """
         path = self.get_batch_cache_path(batch_indices=batch_indices)
         return os.path.exists(path)
 
     def load_batch_from_disk(self, batch_indices):
+        """
+        Returns the batch data of current batch from disk
+        :param batch_indices:
+        :return:
+        """
         path = self.get_batch_cache_path(batch_indices=batch_indices)
         data = np.load(path)
         return data['x'], data['y']
 
     def get_or_process_batch(self, key, batch_indices, executor):
+        """
+        Returns the batch data if cached or stored in disk, otherwise it is processed then
+        cached or stored in disk
+        :param key: Indices of the batch
+        """
         if self.cache_type == "memory" and key in self.cache:
             return self.cache[key]
 
@@ -198,24 +241,33 @@ class DataLoader:
         return x_batch, y_batch
 
     def auto_tune_batching(self):
+        """
+        Changes size of batches based on performance of loader
+        """
         if self.profiler.check_to_tune(self.current_batch_index):
             avg_time = self.profiler.mean_time()
-            if avg_time > 0.2 and self.batch_size > 4:
+            if avg_time > 0.001 and self.batch_size > 4:
                 self.batch_size = max(4, self.batch_size // 2)
-            elif avg_time < 0.05 and self.batch_size < 256:
+            elif avg_time <= 0.001 and self.batch_size < 256:
                 self.batch_size = self.batch_size * 2
 
             self.profiler.update_tune_counter(self.current_batch_index)
 
     def load_batches(self):
+        """
+        Applied transforms onto batch in parallel then adds it to the batch queue
+        Loader is profiled here for auto-tuning
+        :return:
+        """
         with ProcessPoolExecutor(max_workers=self.workers) as executor:
 
-            while self.current_batch_index < len(self.indices):
+            while self.current_batch_index < len(self.indices):  # Loop through all batches
                 start_time = time.time()
                 end = min(self.current_batch_index + self.batch_size, len(self.indices))
                 current_batch_indices = self.indices[self.current_batch_index:end]
-                key = tuple(current_batch_indices)
+                key = tuple(current_batch_indices)  # Key for cache
 
+                # Gets a processed batch
                 x_batch, y_batch = self.get_or_process_batch(key=key,
                                                              batch_indices=current_batch_indices,
                                                              executor=executor)
@@ -229,12 +281,15 @@ class DataLoader:
                 if self.auto_tune:
                     self.auto_tune_batching()
 
-
-
         self.batch_queue.put(None)
 
 
 def process_sample(sample, transforms):
+    """
+    Apply pipeline onto sample
+    :param transforms: Transforms to be applied on sample
+    :param sample: Unprocessed batch
+    """
     x, y = sample
     pipeline = Pipeline(transforms)
     x, y = pipeline(x, y)
