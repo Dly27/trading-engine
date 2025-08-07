@@ -1,3 +1,4 @@
+import time
 from collections import OrderedDict
 from typing import Literal
 
@@ -169,7 +170,7 @@ class RedBlackTree:
             raise ValueError("INVALID: THIS IS FOR BIDS")
 
         if self.root is None:
-            return None
+            raise EmptyBookError("CURRENTLY NO BIDS IN BOOK")
 
         current_price_node = self.root
 
@@ -205,7 +206,7 @@ class RedBlackTree:
             raise ValueError("INVALID: THIS IS FOR ASKS")
 
         if self.root is None:
-            return None
+            raise EmptyBookError("CURRENTLY NO ASKS IN BOOK")
 
         current_price_node = self.root
 
@@ -232,16 +233,33 @@ class RedBlackTree:
 
         return None
 
+class EmptyBookError(Exception):
+    pass
+
 
 class Order:
-    def __init__(self, order_id: str, order_type: Literal["ask", "bid"], order_price: int):
+    def __init__(self, order_id: str,
+                 side: Literal["ask", "bid"],
+                 order_kind: Literal["market", "limit"],
+                 order_price: float,
+                 quantity: int):
+
         self.order_id = order_id
         self.order_price = order_price
+        self.quantity = quantity
+        self.timestamp = time.time()
 
-        if order_type != "ask" and order_type != "bid":
+        if side != "ask" and side != "bid":
             raise ValueError("INVALID ORDER TYPE")
         else:
-            self.order_type = order_type
+            self.side = side
+
+        if order_kind != "market" and order_kind != "limit":
+            raise ValueError("INVALID ORDER KIND")
+        else:
+            self.order_kind = order_kind
+
+
 
 
 class OrderBook:
@@ -257,12 +275,12 @@ class OrderBook:
         :param order:
         :return:
         """
-        if order.order_type == "ask":
+        if order.side == "ask":
             price_node = self.asks.add_price(order.order_price)  # Add new price node
             price_node.values[order.order_id] = order
             self.order_id_map[order.order_id] = price_node
 
-        elif order.order_type == "bid":
+        elif order.side == "bid":
             price_node = self.bids.add_price(order.order_price)  # Add new price node
             price_node.values[order.order_id] = order
             self.order_id_map[order.order_id] = price_node
@@ -275,7 +293,7 @@ class OrderBook:
         price_node = self.order_id_map.get(order_id)
 
         if price_node is None:
-            raise  ValueError(f"ORDER {order_id} NOT FOUND")
+            raise ValueError(f"ORDER {order_id} NOT FOUND")
 
         if order_id not in price_node.values:
             raise ValueError(f"ORDER {order_id} NOT FOUND")
@@ -308,19 +326,133 @@ class OrderBook:
 
         return best_ask.order_price - best_bid.order_price
 
+class MatchingEngine:
+    def __init__(self, order_book):
+        self.order_book = order_book
+        self.trades = []
+
+    def process_order(self, order):
+        if order.side == "ask":
+            self.process_sell_order(order=order)
+        else:
+            self.process_buy_order(order=order)
+
+    def process_buy_order(self, order):
+
+        while order.quantity > 0:
+            best_ask = self.order_book.get_best_ask()
+
+            if best_ask is None:
+                break
+
+            if not self.match_possible(buy_order=order, sell_order=best_ask):
+                break
+
+            trade = self.execute_trade(buy_order=order, sell_order=best_ask)
+
+            if trade:
+                self.trades.append(trade)
+
+        if order.quantity > 0:
+            self.order_book.add_order(order)
+
+    def process_sell_order(self, order):
+        while order.quantity > 0:
+            best_bid = self.order_book.get_best_bid()
+
+            if best_bid is None:
+                break
+
+            if not self.match_possible(buy_order=best_bid, sell_order=order):
+                break
+
+            trade = self.execute_trade(buy_order=best_bid, sell_order=order)
+
+            if trade:
+                self.trades.append(trade)
+
+        if order.quantity > 0:
+            self.order_book.add_order(order)
+
+    def match_possible(self, buy_order=None, sell_order=None):
+        if sell_order is None or buy_order is None:
+            raise ValueError("BUY OR SELL ORDER NOT SPECIFIED")
+
+        if sell_order.order_kind == "market" or buy_order == "market":
+            return True
+
+        return buy_order.order_price >= sell_order.order_price
+
+    def execute_trade(self, buy_order, sell_order):
+        trade_quantity = min(buy_order.quantity, sell_order.quantity)
+
+        if trade_quantity <= 0:
+            return None
+
+        trade_price = self.get_trade_price(buy_order=buy_order, sell_order=sell_order)
+
+        buy_order.quantity -= trade_quantity
+        sell_order.quantity -= trade_quantity
+
+        if buy_order.quantity == 0 and buy_order.order_id in self.order_book.order_id_map:
+            self.order_book.cancel_order(order_id=buy_order.order_id)
+        if sell_order.quantity == 0 and buy_order.order_id in self.order_book.order_id_map:
+            self.order_book.cancel_order(order_id=sell_order.order_id)
+
+        trade = Trade(trade_id=str(len(self.trades)),
+                      buyer_order_id=buy_order.order_id,
+                      seller_order_id=sell_order.order_id,
+                      price=trade_price,
+                      quantity=trade_quantity,
+                      instrument="stock")
+
+        self.trades.append(trade)
+
+        return trade
+
+    def get_trade_price(self, buy_order, sell_order):
+        if buy_order.order_kind == "market":
+            return sell_order.order_price
+        if sell_order.order_kind == "market":
+            return buy_order.order_price
+
+        if buy_order.timestamp > sell_order.timestamp:
+            return sell_order.order_price
+        else:
+            return buy_order.order_price
+
+
+class Trade:
+    def __init__(self, trade_id: str,
+                 buyer_order_id: str,
+                 seller_order_id: str,
+                 price: float,
+                 quantity: int,
+                 instrument: Literal["option", "future", "stock", "swap"]):
+
+        self.trade_id = trade_id
+        self.buyer_order_id = buyer_order_id
+        self.seller_order_id = seller_order_id
+        self.quantity = quantity
+        self.price = price
+        self.instrument = instrument
+        self.timestamp = time.time()
+
+
 
 if __name__ == "__main__":
     book = OrderBook()
+    match = MatchingEngine(order_book=book)
 
     # Add bids and asks
     counter = 0
-    for price in [10, 10, 20, 30, 40, 40]:
-        order = Order(order_id=str(counter), order_type="bid", order_price=price)
+    for price in [10, 10, 20, 30, 40, 40, 50, 100, 30, 20, 10, 500, 240, 210, 32]:
+        order = Order(order_id=str(counter), side="bid", order_kind="limit", order_price=price, quantity=100)
         book.add_order(order=order)
         counter += 1
 
-    for price in [50, 51, 52, 60, 70, 80]:
-        order = Order(order_id=str(counter), order_type="ask", order_price=price)
+    for price in [50, 51, 52, 60, 70, 80, 130, 403, 5034, 3053, 232, 424, 3434]:
+        order = Order(order_id=str(counter), side="ask", order_kind="limit", order_price=price, quantity=100)
         book.add_order(order=order)
         counter += 1
 
@@ -329,6 +461,8 @@ if __name__ == "__main__":
 
     second_best_bid = book.get_best_bid()
     book.cancel_order(order_id=second_best_bid.order_id)
+
+    match.process_order(order=Order(order_id=str(counter), side="ask", order_kind="market", order_price=1000, quantity=1000))
 
     print(f"Spread: {book.get_spread()}")
     print(f"Best bid: {book.get_best_bid().order_price}")
