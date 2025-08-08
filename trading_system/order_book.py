@@ -1,9 +1,8 @@
 import time
 from typing import Literal
 from .red_black_tree import RedBlackTree
-import os
-import json
 from pathlib import Path
+import pickle
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 ORDER_BOOK_DIR = BASE_DIR / "order_books"
@@ -35,10 +34,12 @@ class Order:
 
 
 class OrderBook:
-    def __init__(self):
+    def __init__(self, ticker: str):
+        self.ticker = ticker
         self.asks = RedBlackTree(type="asks")
         self.bids = RedBlackTree(type="bids")
         self.order_id_map = {}  # order_id: price_node
+        self.trades = []
 
     def add_order(self, order):
         """

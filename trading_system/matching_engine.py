@@ -1,25 +1,23 @@
 from trade import Trade
-class MatchingEngine:
-    def __init__(self, order_book):
-        self.order_book = order_book
-        self.trades = []
 
-    def process_order(self, order):
+
+class MatchingEngine:
+    def process_order(self, order, order_book):
         """
         Matches the order with another order and executes the trade
         """
         if order.side == "ask":
-            self.process_sell_order(order=order)
+            self.process_sell_order(order=order, order_book=order_book)
         else:
-            self.process_buy_order(order=order)
+            self.process_buy_order(order=order, order_book=order_book)
 
-    def process_buy_order(self, order):
+    def process_buy_order(self, order, order_book):
         """
         Constantly performs trades until all instruments required are bought or
         stops if an ask cannot be found
         """
         while order.quantity > 0:
-            best_ask = self.order_book.get_best_ask()
+            best_ask = order_book.get_best_ask()
 
             if best_ask is None:
                 break
@@ -27,21 +25,21 @@ class MatchingEngine:
             if not self.match_possible(buy_order=order, sell_order=best_ask):
                 break
 
-            trade = self.execute_trade(buy_order=order, sell_order=best_ask)
+            trade = self.execute_trade(buy_order=order, sell_order=best_ask, order_book=order_book)
 
             if trade:
-                self.trades.append(trade)
+                order_book.trades.append(trade)
 
         if order.quantity > 0:
-            self.order_book.add_order(order)
+            order_book.add_order(order)
 
-    def process_sell_order(self, order):
+    def process_sell_order(self, order, order_book):
         """
         Constantly performs trades until all instruments required are sold or
         stops if a bid cannot be found
         """
         while order.quantity > 0:
-            best_bid = self.order_book.get_best_bid()
+            best_bid = order_book.get_best_bid()
 
             if best_bid is None:
                 break
@@ -49,13 +47,13 @@ class MatchingEngine:
             if not self.match_possible(buy_order=best_bid, sell_order=order):
                 break
 
-            trade = self.execute_trade(buy_order=best_bid, sell_order=order)
+            trade = self.execute_trade(buy_order=best_bid, sell_order=order, order_book=order_book)
 
             if trade:
-                self.trades.append(trade)
+                order_book.trades.append(trade)
 
         if order.quantity > 0:
-            self.order_book.add_order(order)
+            order_book.add_order(order)
 
     def match_possible(self, buy_order=None, sell_order=None):
         """
@@ -70,7 +68,7 @@ class MatchingEngine:
 
         return buy_order.order_price >= sell_order.order_price
 
-    def execute_trade(self, buy_order, sell_order):
+    def execute_trade(self, buy_order, sell_order, order_book):
         """
         Adjusts the remaining quantity of an order
         Removes the order from order book if order is completed
@@ -86,19 +84,19 @@ class MatchingEngine:
         buy_order.quantity -= trade_quantity
         sell_order.quantity -= trade_quantity
 
-        if buy_order.quantity == 0 and buy_order.order_id in self.order_book.order_id_map:
-            self.order_book.cancel_order(order_id=buy_order.order_id)
-        if sell_order.quantity == 0 and buy_order.order_id in self.order_book.order_id_map:
-            self.order_book.cancel_order(order_id=sell_order.order_id)
+        if buy_order.quantity == 0 and buy_order.order_id in order_book.order_id_map:
+            order_book.cancel_order(order_id=buy_order.order_id)
+        if sell_order.quantity == 0 and buy_order.order_id in order_book.order_id_map:
+            order_book.cancel_order(order_id=sell_order.order_id)
 
-        trade = Trade(trade_id=str(len(self.trades)),
+        trade = Trade(trade_id=str(len(order_book.trades)),
                       buyer_order_id=buy_order.order_id,
                       seller_order_id=sell_order.order_id,
                       price=trade_price,
                       quantity=trade_quantity,
                       instrument="stock")
 
-        self.trades.append(trade)
+        order_book.trades.append(trade)
 
         return trade
 

@@ -1,4 +1,4 @@
-from order_book.order_book import *
+from trading_system.order_book import *
 
 if __name__ == "__main__":
     pass
