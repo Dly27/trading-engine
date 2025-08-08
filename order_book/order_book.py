@@ -1,7 +1,12 @@
 import time
 from typing import Literal
-from red_black_tree import RedBlackTree
-from matching_engine import MatchingEngine
+from .red_black_tree import RedBlackTree
+import os
+import json
+from pathlib import Path
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+ORDER_BOOK_DIR = BASE_DIR / "order_books"
 
 
 class Order:
@@ -9,12 +14,14 @@ class Order:
                  side: Literal["ask", "bid"],
                  order_kind: Literal["market", "limit"],
                  order_price: float,
-                 quantity: int):
+                 quantity: int,
+                 ticker: str):
 
         self.order_id = order_id
         self.order_price = order_price
         self.quantity = quantity
         self.timestamp = time.time()
+        self.ticker= ticker
 
         if side != "ask" and side != "bid":
             raise ValueError("INVALID ORDER TYPE")
@@ -37,7 +44,7 @@ class OrderBook:
         """
         Adds order to either bids or asks
         Adds order to order_id_map
-        :param order:
+        :param order
         :return:
         """
         if order.side == "ask":
@@ -90,34 +97,3 @@ class OrderBook:
             return None
 
         return best_ask.order_price - best_bid.order_price
-
-
-if __name__ == "__main__":
-    book = OrderBook()
-    match = MatchingEngine(order_book=book)
-
-    # Add bids and asks
-    counter = 0
-    for price in [10, 10, 20, 30, 40, 40, 50, 100, 30, 20, 10, 500, 240, 210, 32]:
-        order = Order(order_id=str(counter), side="bid", order_kind="limit", order_price=price, quantity=100)
-        book.add_order(order=order)
-        counter += 1
-
-    for price in [50, 51, 52, 60, 70, 80, 130, 403, 5034, 3053, 232, 424, 3434]:
-        order = Order(order_id=str(counter), side="ask", order_kind="limit", order_price=price, quantity=100)
-        book.add_order(order=order)
-        counter += 1
-
-    best_bid = book.get_best_bid()
-    book.cancel_order(order_id=best_bid.order_id)
-
-    second_best_bid = book.get_best_bid()
-    book.cancel_order(order_id=second_best_bid.order_id)
-
-    match.process_order(
-        order=Order(order_id=str(counter), side="ask", order_kind="market", order_price=1000, quantity=1000))
-
-    print(f"Spread: {book.get_spread()}")
-    print(f"Best bid: {book.get_best_bid().order_price}")
-    print(f"Best ask: {book.get_best_ask().order_price}")
-
