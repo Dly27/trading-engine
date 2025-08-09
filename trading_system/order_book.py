@@ -2,7 +2,6 @@ import time
 from typing import Literal
 from .red_black_tree import RedBlackTree
 from pathlib import Path
-import pickle
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 ORDER_BOOK_DIR = BASE_DIR / "order_books"
@@ -10,6 +9,7 @@ ORDER_BOOK_DIR = BASE_DIR / "order_books"
 
 class Order:
     def __init__(self, order_id: str,
+                 portfolio_id: str,
                  side: Literal["ask", "bid"],
                  order_kind: Literal["market", "limit"],
                  order_price: float,
@@ -20,7 +20,8 @@ class Order:
         self.order_price = order_price
         self.quantity = quantity
         self.timestamp = time.time()
-        self.ticker= ticker
+        self.ticker = ticker
+        self.portfolio_id = portfolio_id
 
         if side != "ask" and side != "bid":
             raise ValueError("INVALID ORDER TYPE")

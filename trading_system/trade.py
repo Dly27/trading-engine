@@ -1,6 +1,9 @@
 import time
 from typing import Literal
-class Trade:
+import datetime
+
+
+class OrderBookTrade:
     def __init__(self, trade_id: str,
                  buyer_order_id: str,
                  seller_order_id: str,
@@ -14,3 +17,24 @@ class Trade:
         self.price = price
         self.instrument = instrument
         self.timestamp = time.time()
+
+
+class PositionTrade:
+    def __init__(self,
+                 trade_id: str,
+                 ticker: str,
+                 side: str,
+                 quantity: float,
+                 price: float,
+                 timestamp: datetime,
+                 commission: float,
+                 close_open: Literal["close", "open"]
+                 ):
+        self.trade_id = trade_id
+        self.ticker = ticker
+        self.side = side
+        self.quantity = quantity
+        self.price = price
+        self.timestamp = timestamp
+        self.commission = commission
+        self.close_open = close_open

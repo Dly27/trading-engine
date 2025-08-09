@@ -1,7 +1,11 @@
-from trade import Trade
+from .trade import OrderBookTrade
 
 
 class MatchingEngine:
+
+    def __init__(self):
+        self.previous_trade_occurred = False
+
     def process_order(self, order, order_book):
         """
         Matches the order with another order and executes the trade
@@ -89,7 +93,7 @@ class MatchingEngine:
         if sell_order.quantity == 0 and buy_order.order_id in order_book.order_id_map:
             order_book.cancel_order(order_id=sell_order.order_id)
 
-        trade = Trade(trade_id=str(len(order_book.trades)),
+        trade = OrderBookTrade(trade_id=str(len(order_book.trades)),
                       buyer_order_id=buy_order.order_id,
                       seller_order_id=sell_order.order_id,
                       price=trade_price,
