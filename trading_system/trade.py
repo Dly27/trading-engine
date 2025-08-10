@@ -23,7 +23,7 @@ class PositionTrade:
     def __init__(self,
                  trade_id: str,
                  ticker: str,
-                 side: str,
+                 side: Literal["bid", "ask"],
                  quantity: float,
                  price: float,
                  timestamp: datetime,

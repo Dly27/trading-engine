@@ -12,7 +12,7 @@ class TradingSystem:
             base_dir = Path(__file__).resolve().parent.parent
         self.base_dir = Path(base_dir)
         self.base_dir.mkdir(exist_ok=True)
-        self.order_books = {} # ticker: OrderBook
+        self.order_books = {}  # ticker: OrderBook
         self.portfolio_count = 0
         self.matching_engine = MatchingEngine()
 
@@ -53,7 +53,6 @@ class TradingSystem:
         # Remove order_book from memory
         del order_book[ticker]
 
-
     def load_portfolio(self, portfolio_id):
         path = self.base_dir / "portfolios" / f"{portfolio_id}.pkl"
 
@@ -72,30 +71,40 @@ class TradingSystem:
 
         return portfolio
 
+    def process_trade_request(self, portfolio):
+        for i in range(len(portfolio.trade_requests)):
+            position_trade = portfolio.trade_requests.popleft()
+            ticker = position_trade.ticker
+            order_book = self.order_books[ticker]
 
-    def request_trade(self, portfolio, trade):
-        ticker = trade.ticker
-        order_book = self.order_books[ticker]
+            if order_book is None:
+                raise OrderBookError("ORDER BOOK NOT FOUND. PLEASE LOAD ORDER BOOK FIRST")
 
-        if order_book is None:
-            raise OrderBookError("ORDER BOOK NOT FOUND. PLEASE LOAD ORDER BOOK FIRST")
+            side = "bid" if position_trade.close_open == "open" else "ask"
 
-        order = Order(order_id=str(len(order_book.order_map_id)),
-                      order_kind="market",
-                      order_price=trade.price,
-                      side=trade.side,
-                      portfolio_id=portfolio.portfolio_id,
-                      quantity=trade.quantity,
-                      ticker= ticker
-        )
+            order = Order(order_id=str(len(order_book.order_map_id)),
+                          order_kind="market",
+                          order_price=position_trade.price,
+                          side=side,
+                          portfolio_id=portfolio.portfolio_id,
+                          quantity=position_trade.quantity,
+                          ticker=position_trade.ticker
+                          )
 
-        original_quantity = order.quantity
-        self.matching_engine.process_order(order=order, order_book=order_book)
-        quantity_traded = original_quantity - order.quantity
+            original_quantity = order.quantity
+            self.matching_engine.process_order(order=order, order_book=order_book)
+            quantity_traded = original_quantity - order.quantity
 
-        # Check if trade occurred, then update portfolio
-        if quantity_traded > 0:
-            portfolio.update()
+            # Check if trade occurred in order book, then update portfolio
+            if quantity_traded > 0:
+                if position_trade.close_open == "open":
+                    portfolio.open_position(position_trade=position_trade)
+                else:
+                    portfolio.close_position(ticker=ticker, quantity=quantity_traded)
+            else:
+                raise OrderBookError(f"")
+
+
 
 class OrderBookError(Exception):
     pass

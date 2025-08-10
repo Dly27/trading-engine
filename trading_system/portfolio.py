@@ -1,6 +1,8 @@
 from typing import Literal, Optional
 from trade import PositionTrade
 from datetime import datetime
+from collections import deque
+
 
 class Position:
     def __init__(self,
@@ -8,7 +10,7 @@ class Position:
                  position_type: Literal["short", "long"],
                  entry_price: float,
                  current_price: float,
-                 quantity: int,
+                 quantity: float,
                  take_profit: float):
 
         self.ticker = ticker
@@ -25,8 +27,9 @@ class Portfolio:
         self.cash = 0
         self.commission_rate = 0.001
         self.positions = {} # ticker : Position # ticker : Position
-        self.trade_history = []
+        self.position_trade_history = []
         self.max_position_size = 0.9
+        self.trade_requests = deque([]) # Stores positions needed to be fulfilled by trading system
 
     @property
     def total_market_value(self):
@@ -64,82 +67,65 @@ class Portfolio:
 
         return True
 
-    def open_position(self,
-                      ticker: str,
-                      position_type: Literal["short", "long"],
-                      current_price: float,
-                      quantity: int,
-                      take_profit: float
-                      ):
-
+    def open_position(self, position_trade: PositionTrade):
+        """Open a position using a PositionTrade object"""
         delete_position = False  # For when a short and long position cancel out
 
-        if not self.can_afford_position(ticker=ticker,
-                                        quantity=quantity,
-                                        price=current_price):
+        position_type = "long" if position_trade.side == "bid" else "short"
 
+        if not self.can_afford_position(ticker=position_trade.ticker,
+                                        quantity=position_trade.quantity,
+                                        price=position_trade.price):
             raise InvalidPosition("INVALID POSITION")
 
-        position_value = quantity * current_price
-        commission = position_value * self.commission_rate
+        position_value = position_trade.quantity * position_trade.price
 
         # Update cash
         if position_type == "long":
-            self.cash -= (position_value + commission)
+            self.cash -= (position_value + position_trade.commission)
         else:  # short position
-            self.cash += (position_value - commission)
+            self.cash += (position_value - position_trade.commission)
 
         # Create or update position
-        if ticker in self.positions:
+        if position_trade.ticker in self.positions:
+            existing = self.positions[position_trade.ticker]
 
-            existing = self.positions[ticker]
             # Average out positions if position types are the same
             if existing.position_type == position_type:
-
-                total_quantity = existing.quantity + quantity
+                total_quantity = existing.quantity + position_trade.quantity
                 weighted_price = (
-                    (existing.entry_price * existing.quantity + current_price * quantity)
-                    / total_quantity
+                        (existing.entry_price * existing.quantity + position_trade.price * position_trade.quantity)
+                        / total_quantity
                 )
                 existing.quantity = total_quantity
                 existing.entry_price = weighted_price
-
             else:
                 # Net out or reverse
-                total_quantity = existing.quantity - quantity
-
+                total_quantity = existing.quantity - position_trade.quantity
                 if total_quantity > 0:
                     existing.quantity = total_quantity
                 elif total_quantity < 0:
                     existing.quantity = abs(total_quantity)
-                    existing.position_type = position_type  # Change position to short, quantity being less
-                    existing.entry_price = current_price    # then 0 means new position has to be a short
+                    existing.position_type = position_type  # Change position type
+                    existing.entry_price = position_trade.price  # New entry price for reversed position
                 else:
                     delete_position = True
         else:
-            # Add new position
-            self.positions[ticker] = Position(
-                ticker=ticker,
+            # Create new position
+            new_position = Position(
+                ticker=position_trade.ticker,
                 position_type=position_type,
-                entry_price=current_price,
-                quantity=quantity,
-                current_price=current_price,
-                take_profit=take_profit
+                entry_price=position_trade.price,
+                current_price=position_trade.price,
+                quantity=position_trade.quantity,
+                take_profit=0
             )
-
-        self.create_trade(ticker=ticker,
-                          position_type=position_type,
-                          close_open="open",
-                          quantity=quantity,
-                          price=current_price,
-                          commission=commission,
-                          )
+            self.positions[position_trade.ticker] = new_position
 
         if delete_position:
-            del self.positions[ticker]
+            del self.positions[position_trade.ticker]
 
-
-    def close_position(self, ticker: str, quantity: Optional[int] = None):
+    def close_position(self, ticker: str, quantity: Optional[float] = None):
         if ticker not in self.positions:
             return False
 
@@ -159,14 +145,6 @@ class Portfolio:
         else:
             self.cash -= (proceeds + commission)
 
-        self.create_trade(ticker=ticker,
-                          position_type=position.position_type,
-                          close_open="close",
-                          quantity=close_quantity,
-                          price=position.current_price,
-                          commission=commission,
-                          )
-
         # Update position
         if close_quantity == position.quantity:
             del self.positions[ticker]
@@ -175,13 +153,13 @@ class Portfolio:
 
         return True
 
-    def create_trade(self,
-                     ticker: str,
-                     position_type: Literal["long", "short"],
-                     close_open: Literal["open", "close"],
-                     quantity: float,
-                     price: float,
-                     commission: float):
+    def create_position_trade(self,
+                              ticker: str,
+                              position_type: Literal["long", "short"],
+                              close_open: Literal["open", "close"],
+                              quantity: float,
+                              price: float,
+                              commission: float):
 
         if close_open == "open":
             side = "bid" if position_type == "long" else "ask"
@@ -189,7 +167,7 @@ class Portfolio:
             side = "ask" if position_type == "long" else "bid"
 
         trade = PositionTrade(
-            trade_id=f"T{len(self.trade_history) + 1}",
+            trade_id=f"T{len(self.position_trade_history) + 1}",
             ticker=ticker,
             side=side,
             quantity=quantity,
@@ -198,10 +176,27 @@ class Portfolio:
             close_open=close_open,
             commission=commission
         )
-        self.trade_history.append(trade)
+        self.position_trade_history.append(trade)
 
-    def update(self):
-        pass
+        return trade
+
+    def request_trade(self,
+                      ticker: str,
+                      position_type: Literal["long", "short"],
+                      close_open: Literal["open", "close"],
+                      quantity: float,
+                      price: float,
+                      commission: float):
+
+        position_trade = self.create_position_trade(self,
+                                                    ticker,
+                                                    position_type,
+                                                    close_open,
+                                                    quantity,
+                                                    price,
+                                                    commission)
+
+        self.trade_requests.append(position_trade)
 
 
 class InvalidPosition(Exception):
