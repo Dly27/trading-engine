@@ -1,9 +1,0 @@
-{"event_type": "ADD", "order_id": "0", "side": "bid", "order_kind": "limit", "order_price": 15, "quantity": 10, "timestamp": 1754664094.1622367, "ticker": "TEST"}
-{"event_type": "ADD", "order_id": "1", "side": "ask", "order_kind": "limit", "order_price": 155, "quantity": 5, "timestamp": 1754664094.16354, "ticker": "TEST"}
-{"event_type": "CANCEL", "order_id": "1", "timestamp": 1754664094.164617, "ticker": "TEST"}
-{"event_type": "ADD", "order_id": "0", "side": "bid", "order_kind": "limit", "order_price": 15, "quantity": 10, "timestamp": 1754664101.0722332, "ticker": "TEST"}
-{"event_type": "ADD", "order_id": "1", "side": "ask", "order_kind": "limit", "order_price": 155, "quantity": 5, "timestamp": 1754664101.0733197, "ticker": "TEST"}
-{"event_type": "CANCEL", "order_id": "1", "timestamp": 1754664101.0788188, "ticker": "TEST"}
-{"event_type": "ADD", "order_id": "0", "side": "bid", "order_kind": "limit", "order_price": 15, "quantity": 10, "timestamp": 1754665075.3898163, "ticker": "TEST"}
-{"event_type": "ADD", "order_id": "1", "side": "ask", "order_kind": "limit", "order_price": 155, "quantity": 5, "timestamp": 1754665075.3908389, "ticker": "TEST"}
-{"event_type": "CANCEL", "order_id": "1", "timestamp": 1754665075.3908389, "ticker": "TEST"}

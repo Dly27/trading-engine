@@ -1,5 +1,5 @@
 from typing import Literal, Optional
-from trade import PositionRequest
+from trading_system.trade import PositionRequest
 from datetime import datetime
 from collections import deque
 
@@ -187,7 +187,7 @@ class Portfolio:
                       price: float,
                       commission: float):
 
-        position_trade = self.create_position_request(self,
+        position_trade = self.create_position_request(
                                                       ticker=ticker,
                                                       position_type=position_type,
                                                       close_open=close_open,

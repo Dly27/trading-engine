@@ -90,7 +90,7 @@ class MatchingEngine:
 
         if buy_order.quantity == 0 and buy_order.order_id in order_book.order_id_map:
             order_book.cancel_order(order_id=buy_order.order_id)
-        if sell_order.quantity == 0 and buy_order.order_id in order_book.order_id_map:
+        if sell_order.quantity == 0 and sell_order.order_id in order_book.order_id_map:
             order_book.cancel_order(order_id=sell_order.order_id)
 
         trade = OrderBookTrade(trade_id=str(len(order_book.trades)),
