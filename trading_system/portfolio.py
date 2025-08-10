@@ -1,5 +1,5 @@
 from typing import Literal, Optional
-from trade import PositionTrade
+from trade import PositionRequest
 from datetime import datetime
 from collections import deque
 
@@ -12,7 +12,6 @@ class Position:
                  current_price: float,
                  quantity: float,
                  take_profit: float):
-
         self.ticker = ticker
         self.position_type = position_type
         self.entry_price = entry_price
@@ -20,16 +19,17 @@ class Position:
         self.current_price = current_price
         self.take_profit = take_profit
 
+
 class Portfolio:
 
     def __init__(self, portfolio_id):
         self.portfolio_id = portfolio_id
         self.cash = 0
         self.commission_rate = 0.001
-        self.positions = {} # ticker : Position # ticker : Position
+        self.positions = {}  # ticker : Position # ticker : Position
         self.position_trade_history = []
         self.max_position_size = 0.9
-        self.trade_requests = deque([]) # Stores positions needed to be fulfilled by trading system
+        self.trade_requests = deque([])  # Stores positions needed to be fulfilled by trading system
 
     @property
     def total_market_value(self):
@@ -47,7 +47,7 @@ class Portfolio:
     def buying_power(self):
         return max(0, self.cash)
 
-    def can_afford_position(self, ticker: str, quantity: int, price: float) -> bool:
+    def can_afford_position(self, quantity: float, price: float) -> bool:
         """Check if portfolio can afford a new position"""
         position_value = quantity * price
         commission = position_value * self.commission_rate
@@ -67,14 +67,13 @@ class Portfolio:
 
         return True
 
-    def open_position(self, position_trade: PositionTrade):
+    def open_position(self, position_trade: PositionRequest):
         """Open a position using a PositionTrade object"""
         delete_position = False  # For when a short and long position cancel out
 
         position_type = "long" if position_trade.side == "bid" else "short"
 
-        if not self.can_afford_position(ticker=position_trade.ticker,
-                                        quantity=position_trade.quantity,
+        if not self.can_afford_position(quantity=position_trade.quantity,
                                         price=position_trade.price):
             raise InvalidPosition("INVALID POSITION")
 
@@ -153,20 +152,20 @@ class Portfolio:
 
         return True
 
-    def create_position_trade(self,
-                              ticker: str,
-                              position_type: Literal["long", "short"],
-                              close_open: Literal["open", "close"],
-                              quantity: float,
-                              price: float,
-                              commission: float):
+    def create_position_request(self,
+                                ticker: str,
+                                position_type: Literal["long", "short"],
+                                close_open: Literal["open", "close"],
+                                quantity: float,
+                                price: float,
+                                commission: float):
 
         if close_open == "open":
             side = "bid" if position_type == "long" else "ask"
         else:
             side = "ask" if position_type == "long" else "bid"
 
-        trade = PositionTrade(
+        request = PositionRequest(
             trade_id=f"T{len(self.position_trade_history) + 1}",
             ticker=ticker,
             side=side,
@@ -176,9 +175,9 @@ class Portfolio:
             close_open=close_open,
             commission=commission
         )
-        self.position_trade_history.append(trade)
+        self.position_trade_history.append(request)
 
-        return trade
+        return request
 
     def request_trade(self,
                       ticker: str,
@@ -188,13 +187,13 @@ class Portfolio:
                       price: float,
                       commission: float):
 
-        position_trade = self.create_position_trade(self,
-                                                    ticker,
-                                                    position_type,
-                                                    close_open,
-                                                    quantity,
-                                                    price,
-                                                    commission)
+        position_trade = self.create_position_request(self,
+                                                      ticker=ticker,
+                                                      position_type=position_type,
+                                                      close_open=close_open,
+                                                      quantity=quantity,
+                                                      price=price,
+                                                      commission=commission)
 
         self.trade_requests.append(position_trade)
 

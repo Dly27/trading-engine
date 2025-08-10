@@ -19,7 +19,7 @@ class OrderBookTrade:
         self.timestamp = time.time()
 
 
-class PositionTrade:
+class PositionRequest:
     def __init__(self,
                  trade_id: str,
                  ticker: str,
