@@ -48,7 +48,10 @@ class Portfolio:
         return max(0, self.cash)
 
     def can_afford_position(self, quantity: float, price: float) -> bool:
-        """Check if portfolio can afford a new position"""
+        """
+        Check if there is enough cash available in portfolio.
+        Makes sure portfolio value is no zero.
+        """
         position_value = quantity * price
         commission = position_value * self.commission_rate
         total_cost = position_value + commission
@@ -68,9 +71,13 @@ class Portfolio:
         return True
 
     def open_position(self, position_trade: PositionRequest):
-        """Open a position using a PositionTrade object"""
+        """
+        Check if portfolio has enough cash to open position.
+        Updates portfolio cash.
+        Updates position if there already exists one else a new one is added.
+        Position is deleted if new position cancels out and existing position.
+        """
         delete_position = False  # For when a short and long position cancel out
-
         position_type = "long" if position_trade.side == "bid" else "short"
 
         if not self.can_afford_position(quantity=position_trade.quantity,
@@ -125,6 +132,11 @@ class Portfolio:
             del self.positions[position_trade.ticker]
 
     def close_position(self, ticker: str, quantity: Optional[float] = None):
+        """
+        Gets a position if it exists.
+        Checks if the close quantity is less than position quantity.
+        Updates portfolio cash and position quantity
+        """
         if ticker not in self.positions:
             return False
 
@@ -160,6 +172,10 @@ class Portfolio:
                                 price: float,
                                 commission: float):
 
+        """
+        Creates a position request
+        """
+
         if close_open == "open":
             side = "bid" if position_type == "long" else "ask"
         else:
@@ -186,8 +202,11 @@ class Portfolio:
                       quantity: float,
                       price: float,
                       commission: float):
+        """
+        Create a position request then add it to the request queue.
+        """
 
-        position_trade = self.create_position_request(
+        position_request = self.create_position_request(
                                                       ticker=ticker,
                                                       position_type=position_type,
                                                       close_open=close_open,
@@ -195,7 +214,7 @@ class Portfolio:
                                                       price=price,
                                                       commission=commission)
 
-        self.trade_requests.append(position_trade)
+        self.trade_requests.append(position_request)
 
 
 class InvalidPosition(Exception):

@@ -100,8 +100,6 @@ class MatchingEngine:
                       quantity=trade_quantity,
                       instrument="stock")
 
-        order_book.trades.append(trade)
-
         return trade
 
     def get_trade_price(self, buy_order, sell_order):

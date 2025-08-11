@@ -1,6 +1,6 @@
 import time
 from typing import Literal
-from .red_black_tree import RedBlackTree
+from .red_black_tree import RedBlackTree, EmptyBookError
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -79,14 +79,20 @@ class OrderBook:
         """
         Get the best bid
         """
-        return self.bids.get_best_bid()
+        try:
+            return self.bids.get_best_bid()
+        except EmptyBookError:
+            return None
+
 
     def get_best_ask(self):
         """
-        Get the worst bid
-        :return:
+        Get the best ask
         """
-        return self.asks.get_best_ask()
+        try:
+            return self.asks.get_best_ask()
+        except EmptyBookError:
+            return None
 
     def get_spread(self):
         """
