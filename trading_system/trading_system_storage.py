@@ -1,20 +1,25 @@
-import pathlib
-from pathlib import Path
+import logging
 import pickle
+import redis
 from trading_system.matching_engine import MatchingEngine
 from trading_system.order_book import OrderBook, Order
 from trading_system.portfolio import Portfolio
 
+logger = logging.getLogger(__name__)
+
 
 class TradingSystem:
-    def __init__(self, base_dir: Path = None):
-        if base_dir is None:
-            base_dir = Path(__file__).resolve().parent.parent
-        self.base_dir = Path(base_dir)
-        self.base_dir.mkdir(exist_ok=True)
+    def __init__(self, redis_url: str = "redis://localhost:6379"):
+        self.redis = redis.from_url(redis_url, decode_responses=False)
+
+        try:
+            self.redis.ping()
+            logger.info("CONNECTED TO REDIS")
+        except:
+            raise Exception("REDIS CONNECTION FAILED")
+
         self.order_books = {}  # ticker: OrderBook
         self.portfolios = {}  # id : Portfolio
-        self.portfolio_count = 0
         self.matching_engine = MatchingEngine()
 
     def __del__(self):
@@ -26,36 +31,43 @@ class TradingSystem:
 
     def load_order_book(self, ticker: str):
         """
-        Load an order book object from a pickle file.
-        :param ticker:
-        :return:
+        Load an order book from redis
         """
-        path = self.base_dir / "order_books" / f"{ticker}.pkl"
+        if ticker in self.order_books:
+            return self.order_books[ticker]
 
-        # Create a new order book if it does not exist
-        if not pathlib.Path.exists(path):
+        data = self.redis.get(f"orderbook:{ticker}")
+
+        if data:
+            # Load order book from redis
+            order_book = pickle.loads(data)
+            logger.info(f"LOADED {ticker} ORDER BOOK FROM REDIS")
+        else:
+            # Create new order book if it does not exist in redis
             order_book = OrderBook(ticker=ticker)
+            logger.info(f"NEW {ticker} ORDER BOOK CREATED")
 
-            with open(path, "wb") as f:
-                pickle.dump(order_book, f)
-        # Convert pickle file into order_book object if it exists
-        with open(path, "rb") as f:
-            order_book = pickle.load(f)
-
-        # Store order book in a map
-        self.order_books[order_book.ticker] = order_book
+        self.order_books[ticker] = order_book
+        return order_book
 
     def save_order_book(self, ticker: str):
         """
-        Save an order book object into a pickle file.
+        Serialise and order book then save to redis
         :param ticker:
         :return:
         """
-        path = self.base_dir / "order_books" / f"{ticker}.pkl"
-        order_book = self.order_books[ticker]
+        if ticker not in self.order_books:
+            return
 
-        with open(path, "wb") as f:
-            pickle.dump(order_book, f)
+        order_book = self.order_books[ticker]
+        data = pickle.dumps(order_book)
+
+        try:
+            # Save order book to redis
+            self.redis.set(f"orderbook:{ticker}", data)
+            logger.info(f"SAVED {ticker} ORDER BOOK TO REDIS")
+        except Exception as e:
+            logger.error(f"FAILED TO SAVE {ticker} ORDER BOOK TO REDIS: {e}")
 
     def save_all(self):
         """
@@ -67,50 +79,53 @@ class TradingSystem:
         for portfolio_id, portfolio in self.portfolios.items():
             self.save_portfolio(portfolio)
 
+        logger.info("SAVED ALL TO REDIS")
+
     def remove_order_book(self, ticker):
         """
         Removes an order book from the trading system memory.
-        :param ticker:
-        :return:
         """
         self.save_order_book(ticker=ticker)
-        order_book = self.order_books[ticker]
 
         # Remove order_book from memory
         del self.order_books[ticker]
 
     def load_portfolio(self, portfolio_id):
         """
-        Loads a pickle file into a portfolio object
+        Loads portfolio object from redis
         """
         # Check if portfolio in portfolio store
         if portfolio_id in self.portfolios:
             return self.portfolios[portfolio_id]
 
-        path = self.base_dir / "portfolios" / f"{portfolio_id}.pkl"
+        data = self.redis.get(f"portfolio:{portfolio_id}")
 
-        # Create a new portfolio if it does not exist
-        if not pathlib.Path.exists(path):
-            portfolio = Portfolio(portfolio_id)
-
-            with open(path, "wb") as f:
-                pickle.dump(portfolio, f)
+        if data:
+            # Load portfolio from redis
+            try:
+                portfolio = pickle.loads(data)
+                logger.info(f"LOADED PORTFOLIO {portfolio_id} FROM REDIS")
+            except Exception as e:
+                logger.error(f"FAILED TO LOAD PORTFOLIO {portfolio_id} FROM REDIS: {e}")
+                raise Exception("PORTFOLIO FAILED TO LOAD")
         else:
-            # Convert pickle file into portfolio object if it exists
-            with open(path, "rb") as f:
-                portfolio = pickle.load(f)
+            # Create new portfolio
+            portfolio = Portfolio(portfolio_id=portfolio_id)
+            logger.info(f"CREATED PORTFOLIO {portfolio_id}")
 
         self.portfolios[portfolio_id] = portfolio
         return portfolio
 
     def save_portfolio(self, portfolio):
         """
-        Saves a portfolio object into a pickle file
+        Serialises portfolio then saves to redis
         """
-        path = self.base_dir / "portfolios" / f"{portfolio.portfolio_id}.pkl"
-
-        with open(path, "wb") as f:
-            pickle.dump(portfolio, f)
+        data = pickle.dumps(portfolio)
+        try:
+            self.redis.set(f"portfolio:{portfolio.portfolio_id}", data)
+            logger.info(f"SAVED PORTFOLIO {portfolio.portfolio_id} TO REDIS")
+        except Exception as e:
+            logger.error(f"FAILED TO SAVE PORTFOLIO {portfolio.portfolio_id} TO REDIS: {e}")
 
     def process_trade_request(self, portfolio):
         """
