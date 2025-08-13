@@ -116,10 +116,11 @@ class TradingSystem:
         self.portfolios[portfolio_id] = portfolio
         return portfolio
 
-    def save_portfolio(self, portfolio):
+    def save_portfolio(self, portfolio_id):
         """
         Serialises portfolio then saves to redis
         """
+        portfolio = self.load_portfolio(portfolio_id)
         data = pickle.dumps(portfolio)
         try:
             self.redis.set(f"portfolio:{portfolio.portfolio_id}", data)
@@ -166,7 +167,6 @@ class TradingSystem:
             else:
                 raise OrderBookError(f"{portfolio.portfolio_id}_{position_request.trade_id} DID NOT EXECUTE. \n"
                                      f"MATCH NOT FOUND.")
-
 
 class OrderBookError(Exception):
     pass

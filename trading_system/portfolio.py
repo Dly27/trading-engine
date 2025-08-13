@@ -9,14 +9,12 @@ class Position:
                  ticker: str,
                  position_type: Literal["short", "long"],
                  entry_price: float,
-                 current_price: float,
                  quantity: float,
                  take_profit: float):
         self.ticker = ticker
         self.position_type = position_type
         self.entry_price = entry_price
         self.quantity = quantity
-        self.current_price = current_price
         self.take_profit = take_profit
 
 
@@ -26,7 +24,7 @@ class Portfolio:
         self.portfolio_id = portfolio_id
         self.cash = 0
         self.commission_rate = 0.001
-        self.positions = {}  # ticker : Position # ticker : Position
+        self.positions = {}  # ticker : Position
         self.position_trade_history = []
         self.max_position_size = 0.9
         self.trade_requests = deque([])  # Stores positions needed to be fulfilled by trading system
@@ -122,7 +120,6 @@ class Portfolio:
                 ticker=position_trade.ticker,
                 position_type=position_type,
                 entry_price=position_trade.price,
-                current_price=position_trade.price,
                 quantity=position_trade.quantity,
                 take_profit=0
             )
@@ -171,7 +168,6 @@ class Portfolio:
                                 quantity: float,
                                 price: float,
                                 commission: float):
-
         """
         Creates a position request
         """
@@ -205,7 +201,6 @@ class Portfolio:
         """
         Create a position request then add it to the request queue.
         """
-
         position_request = self.create_position_request(
                                                       ticker=ticker,
                                                       position_type=position_type,
