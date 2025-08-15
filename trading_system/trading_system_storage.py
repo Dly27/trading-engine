@@ -1,9 +1,11 @@
 import logging
 import pickle
 import redis
+import numpy as np
 from trading_system.matching_engine import MatchingEngine
 from trading_system.order_book import OrderBook, Order
 from trading_system.portfolio import Portfolio
+from trading_system.market_data_fetcher import MarketDataFetcher
 
 logger = logging.getLogger(__name__)
 
@@ -19,42 +21,53 @@ class TradingSystem:
             raise Exception("REDIS CONNECTION FAILED")
 
         self.order_books = {}  # ticker: OrderBook
+        self.data_fetchers = {}  # ticker: MarketDataFetcher
         self.portfolios = {}  # id : Portfolio
         self.matching_engine = MatchingEngine()
 
     def __del__(self):
         """
-        Save portfolios and order books when TradingSystem is deleted
-        :return:
+        Save portfolios and order books when TradingSystem is deleted.
         """
         self.save_all()
 
     def load_order_book(self, ticker: str):
         """
-        Load an order book from redis
+        Load an order book from redis or create new order book if not stored in redis.
+        Create a corresponding market data fetcher for the order book.
         """
         if ticker in self.order_books:
             return self.order_books[ticker]
 
+        # Load from Redis or create new
         data = self.redis.get(f"orderbook:{ticker}")
 
+        # Create an order book by pickling from redis
         if data:
-            # Load order book from redis
-            order_book = pickle.loads(data)
-            logger.info(f"LOADED {ticker} ORDER BOOK FROM REDIS")
+            try:
+                order_book = pickle.loads(data)
+                logger.info(f"LOADED {ticker} ORDER BOOK FROM REDIS")
+            except Exception as e:
+                logger.warning(f"CORRUPTED DATA FOR {ticker}, CREATING NEW: {e}")
+                order_book = OrderBook(ticker=ticker)
         else:
-            # Create new order book if it does not exist in redis
             order_book = OrderBook(ticker=ticker)
             logger.info(f"NEW {ticker} ORDER BOOK CREATED")
 
         self.order_books[ticker] = order_book
+
+        # Create data fetcher if needed
+        if ticker not in self.data_fetchers:
+            try:
+                self.data_fetchers[ticker] = MarketDataFetcher(ticker=ticker)
+            except Exception as e:
+                logger.warning(f"FAILED TO CREATE DATA FETCHER FOR {ticker}: {e}")
+
         return order_book
 
     def save_order_book(self, ticker: str):
         """
-        Serialise and order book then save to redis
-        :param ticker:
-        :return:
+        Serialise and order book then save to redis.
         """
         if ticker not in self.order_books:
             return
@@ -92,7 +105,7 @@ class TradingSystem:
 
     def load_portfolio(self, portfolio_id):
         """
-        Loads portfolio object from redis
+        Loads portfolio object from redis.
         """
         # Check if portfolio in portfolio store
         if portfolio_id in self.portfolios:
@@ -118,15 +131,51 @@ class TradingSystem:
 
     def save_portfolio(self, portfolio_id):
         """
-        Serialises portfolio then saves to redis
+        Serialises portfolio then saves to redis.
         """
         portfolio = self.load_portfolio(portfolio_id)
         data = pickle.dumps(portfolio)
+
         try:
             self.redis.set(f"portfolio:{portfolio.portfolio_id}", data)
             logger.info(f"SAVED PORTFOLIO {portfolio.portfolio_id} TO REDIS")
         except Exception as e:
             logger.error(f"FAILED TO SAVE PORTFOLIO {portfolio.portfolio_id} TO REDIS: {e}")
+
+    def simulate_orders(self, ticker: str, batch_size: int, quantity_range: int):
+        """
+        Uses estimated spreads and current prices from current market data to create synthetic orders.
+        batch_size: The amount of orders to add for bid and ask
+        quantity_range: The range of quantities per order
+        """
+        order_book = self.order_books[ticker]
+        fetcher = self.data_fetchers[ticker]
+
+        base_price, spread = fetcher.get_data()
+
+        for i in range(batch_size):
+            bid_order = Order(ticker=ticker,
+                              side="bid",
+                              portfolio_id="syntethic",
+                              order_id="synthetic_bid_{ticker}_{len(order_book.order_id_map)}_{i}",
+                              order_kind="market",
+                              quantity=np.random.randint(1, quantity_range),
+                              order_price=base_price - np.random.uniform(0, spread / 2)
+                              )
+
+            order_book.add_order(order=bid_order)
+
+        for i in range(batch_size):
+            ask_order = Order(ticker=ticker,
+                              side="ask",
+                              portfolio_id="synthetic",
+                              order_id="synthetic_ask_{ticker}_{len(order_book.order_id_map)}_{i}",
+                              order_kind="market",
+                              quantity=np.random.randint(1, quantity_range),
+                              order_price=base_price + np.random.uniform(0, spread / 2)
+                              )
+
+            order_book.add_order(order=ask_order)
 
     def process_trade_request(self, portfolio):
         """
@@ -167,6 +216,7 @@ class TradingSystem:
             else:
                 raise OrderBookError(f"{portfolio.portfolio_id}_{position_request.trade_id} DID NOT EXECUTE. \n"
                                      f"MATCH NOT FOUND.")
+
 
 class OrderBookError(Exception):
     pass

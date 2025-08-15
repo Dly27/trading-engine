@@ -3,12 +3,7 @@ import numpy as np
 from collections import deque
 import logging
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="[{asctime}] {levelname:<8} {message}",
-    style="{",
-    datefmt="%Y-%m-%d %H:%M:%S"
-)
+logger = logging.getLogger(__name__)
 
 class MarketDataFetcher:
     def __init__(self, ticker: str):
@@ -43,7 +38,7 @@ class MarketDataFetcher:
                 return 0.01
 
         except Exception as e:
-            logging.error(f"COULD NOT CALCULATE BASE SPREAD. DEFAULT ESTIMATE USED: {e}")
+            logger.error(f"COULD NOT CALCULATE BASE SPREAD. DEFAULT ESTIMATE USED: {e}")
             return 0.01
 
     def fetch_initial_data(self):
@@ -55,14 +50,14 @@ class MarketDataFetcher:
             self.current_price = float(self.ticker.fast_info["last_price"])
             self.price_history.append(self.current_price)
         except Exception as e:
-            logging.error(f"FAILED TO FETCH INITIAL DATA: {e}")
+            logger.error(f"FAILED TO FETCH INITIAL DATA: {e}")
             self.price_history.append(self.DEFAULT_PRICE)
 
     def update(self):
         try:
             self.update_price()
         except Exception as e:
-            logging.error(f"COULD NOT UPDATE {self.symbol} DATA: {e}")
+            logger.error(f"COULD NOT UPDATE {self.symbol} DATA: {e}")
 
 
     def update_price(self):
@@ -81,10 +76,10 @@ class MarketDataFetcher:
             # Update spread
             self.update_spread()
 
-            logging.info(f"UPDATED CURRENT PRICE TO {new_price}")
+            logger.info(f"UPDATED CURRENT PRICE TO {new_price}")
             return True
         except Exception as e:
-            logging.error(f"PRICE UPDATE FAILED: {e}")
+            logger.error(f"PRICE UPDATE FAILED: {e}")
             return False
 
     def update_spread(self):
@@ -117,11 +112,11 @@ class MarketDataFetcher:
         """
         Returns current stock price and current estimated spread
         """
+        # Update to new data
+        self.update()
+
         if self.current_price is None:
-            logging.warning(f"NO CURRENT PRICE AVAILABLE FOR {self.ticker}")
+            logger.warning(f"NO CURRENT PRICE AVAILABLE FOR {self.ticker}")
             return None
 
-        return {
-            "price": self.current_price,
-            "spread": self.current_spread,
-        }
+        return self.current_price, self.current_spread
