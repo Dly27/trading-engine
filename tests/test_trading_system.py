@@ -1,4 +1,4 @@
-from trading_system.trading_system_storage import TradingSystem
+from trading_system.trading_system import TradingSystem
 import pytest
 import psutil
 import os
@@ -10,8 +10,7 @@ def test_initial_order_book_status():
     print("=" * 50)
 
     trade_system = TradingSystem()
-    trade_system.load_order_book(ticker="TEST")
-    TEST = trade_system.order_books["TEST"]
+    TEST = trade_system.order_book_manager.load_order_book(ticker="TEST")
 
     print(f"Orders in book: {len(TEST.order_id_map):,}")
     print(f"Best bid: {TEST.get_best_bid().order_price if TEST.get_best_bid() else 'None'}")
@@ -31,7 +30,7 @@ def test_portfolio_initial_state():
     print("=" * 50)
 
     trade_system = TradingSystem()
-    portfolio = trade_system.load_portfolio(portfolio_id="test")
+    portfolio = trade_system.portfolio_manager.load_portfolio(portfolio_id="test")
 
     print(f"Portfolio cash: {portfolio.cash:,.2f}")
 
@@ -62,9 +61,8 @@ def test_trade_execution():
     print("=" * 50)
 
     trade_system = TradingSystem()
-    trade_system.load_order_book(ticker="TEST")
-    portfolio = trade_system.load_portfolio(portfolio_id="test")
-    TEST = trade_system.order_books["TEST"]
+    TEST = trade_system.order_book_manager.load_order_book(ticker="TEST")
+    portfolio = trade_system.portfolio_manager.load_portfolio(portfolio_id="test")
 
     initial_cash = portfolio.cash
     print(f"Initial cash: {initial_cash:,.2f}")
@@ -97,7 +95,7 @@ def test_trade_execution():
                                 quantity=1,
                                 price=best_ask_price,
                                 commission=commission)
-        trade_system.process_trade_request(portfolio=portfolio)
+        trade_system.process_trade_request(portfolio_id="test")
         trades_executed += 1
 
     print(f"Total trades executed: {trades_executed}")
@@ -113,11 +111,9 @@ def test_post_trade_analysis():
     print("=" * 50)
 
     trade_system = TradingSystem()
-    trade_system.load_order_book(ticker="TEST")
-    portfolio = trade_system.load_portfolio(portfolio_id="test")
-    TEST = trade_system.order_books["TEST"]
+    TEST = trade_system.order_book_manager.load_order_book(ticker="TEST")
+    portfolio = trade_system.portfolio_manager.load_portfolio(portfolio_id="test")
 
-    # Execute some trades first
     for _ in range(3):
         best_ask = TEST.get_best_ask()
         if best_ask and portfolio.cash >= best_ask.order_price:
@@ -127,7 +123,7 @@ def test_post_trade_analysis():
                                     quantity=1,
                                     price=best_ask.order_price,
                                     commission=portfolio.commission_rate * best_ask.order_price)
-            trade_system.process_trade_request(portfolio=portfolio)
+            trade_system.process_trade_request(portfolio_id="test")
 
     print(f"Orders in book: {len(TEST.order_id_map):,}")
     print(f"Portfolio cash: {portfolio.cash:,.2f}")
@@ -148,8 +144,7 @@ def test_order_book_analysis():
     print("=" * 50)
 
     trade_system = TradingSystem()
-    trade_system.load_order_book(ticker="TEST")
-    TEST = trade_system.order_books["TEST"]
+    TEST = trade_system.order_book_manager.load_order_book(ticker="TEST")
 
     bid_prices = []
     ask_prices = []

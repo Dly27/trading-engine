@@ -5,6 +5,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
 class MarketDataFetcher:
     def __init__(self, ticker: str):
         self.symbol = ticker
@@ -14,8 +15,8 @@ class MarketDataFetcher:
         self.price_history = deque(maxlen=10)
         self.base_spread = self.estimate_base_spread()
         self.current_spread = self.base_spread
-        self.fetch_initial_data()
         self.DEFAULT_PRICE = 100
+        self.fetch_initial_data()
 
     def estimate_base_spread(self):
         """
@@ -58,7 +59,6 @@ class MarketDataFetcher:
             self.update_price()
         except Exception as e:
             logger.error(f"COULD NOT UPDATE {self.symbol} DATA: {e}")
-
 
     def update_price(self):
         """
