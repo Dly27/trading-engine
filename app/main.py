@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException, status
 from pydantic import BaseModel
 from typing import Literal
-from trading_system.trading_system_storage import TradingSystem, OrderBookError
+from trading_system.trading_system import TradingSystem, OrderBookError
 from trading_system.order_book import Order
 from trading_system.portfolio import Position
 
