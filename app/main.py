@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException, status
 from pydantic import BaseModel
 from typing import Literal
-from trading_system.trading_system import TradingSystem, OrderBookError
+from trading_system.trading_system import TradingSystem
 from trading_system.order_book import Order
 from trading_system.portfolio import Position
 
@@ -32,7 +32,7 @@ trading_system = TradingSystem()
 def get_portfolio(portfolio_id: str):
     try:
         # Load portfolio
-        portfolio = trading_system.load_portfolio(portfolio_id=portfolio_id)
+        portfolio = trading_system.portfolio_manager.load_portfolio(portfolio_id=portfolio_id)
 
         # Get the quantities of each position in the portfolio
         positions = {ticker: position.quantity for ticker, position in portfolio.positions.items()}
@@ -51,7 +51,7 @@ def get_portfolio(portfolio_id: str):
 @app.get("/orderbook/{ticker}")
 def get_order_book(ticker: str):
     # Load order book and values of interest
-    order_book = trading_system.load_order_book(ticker=ticker)
+    order_book = trading_system.order_book_manager.load_order_book(ticker=ticker)
     best_bid = order_book.get_best_bid()
     best_ask = order_book.get_best_ask()
 
@@ -69,7 +69,7 @@ def get_order_book(ticker: str):
 def submit_order(portfolio_id: str, order_request: OrderRequest):
     try:
         # Load order book based on request ticker
-        order_book = trading_system.load_order_book(order_request.ticker)
+        order_book = trading_system.order_book_manager.load_order_book(order_request.ticker)
 
         # Create order
         order_id = f"{portfolio_id}_{len(order_book.order_id_map)}"
@@ -106,7 +106,7 @@ def submit_order(portfolio_id: str, order_request: OrderRequest):
 @app.post("/portfolio/{portfolio_id}/trade-requests")
 def portfolio_trade_request(portfolio_id: str, trade_request: TradeRequest):
     try:
-        portfolio = trading_system.load_portfolio(portfolio_id=portfolio_id)
+        portfolio = trading_system.portfolio_manager.load_portfolio(portfolio_id=portfolio_id)
 
         portfolio.request_trade(
             ticker=trade_request.ticker,
@@ -117,7 +117,7 @@ def portfolio_trade_request(portfolio_id: str, trade_request: TradeRequest):
             commission=trade_request.commission
         )
 
-        trading_system.save_portfolio(portfolio_id)
+        trading_system.portfolio_manager.save_portfolio(portfolio_id)
 
         return {
             "portfolio_id": portfolio_id,
@@ -131,7 +131,7 @@ def portfolio_trade_request(portfolio_id: str, trade_request: TradeRequest):
 @app.post("/portfolio/{portfolio_id}/process-trades")
 def process_portfolio_trade_requests(portfolio_id: str):
     try:
-        portfolio = trading_system.load_portfolio(portfolio_id=portfolio_id)
+        portfolio = trading_system.portfolio_manager.load_portfolio(portfolio_id=portfolio_id)
 
         if len(portfolio.trade_requests) == 0:
             return {
@@ -141,11 +141,11 @@ def process_portfolio_trade_requests(portfolio_id: str):
 
         # Process trade requests and track how many requests processed
         requests_count_before = len(portfolio.trade_requests)
-        trading_system.process_trade_request(portfolio)
+        trading_system.process_trade_request(portfolio_id)
         requests_count_after = len(portfolio.trade_requests)
 
         # Save portfolio
-        trading_system.save_portfolio(portfolio_id)
+        trading_system.portfolio_manager.save_portfolio(portfolio_id)
 
         return {
             "portfolio_id": portfolio_id,
@@ -165,13 +165,13 @@ def process_all_portfolio_trades():
         results = {}
         fully_processed_portfolio_count = 0
 
-        for portfolio_id, portfolio in trading_system.portfolios.items():
+        for portfolio_id, portfolio in trading_system.portfolio_manager.portfolios.items():
             request_count = len(portfolio.trade_requests)
 
             if request_count > 0:
 
                 # Process trade requests of current portfolio
-                trading_system.process_trade_request(portfolio=portfolio)
+                trading_system.process_trade_request(portfolio_id=portfolio_id)
 
                 # Calculate number of successfully processed requests
                 new_request_count = len(portfolio.trade_requests)
@@ -192,7 +192,7 @@ def process_all_portfolio_trades():
 
         return {
             "fully_processed_portfolios": fully_processed_portfolio_count,
-            "partially_processed_portfolios": len(trading_system.portfolios) - fully_processed_portfolio_count,
+            "partially_processed_portfolios": len(trading_system.portfolio_manager.portfolios) - fully_processed_portfolio_count,
             "total_requests_processed": total_processed_requests,
             "portfolio_results": results,
         }
@@ -208,7 +208,7 @@ def process_all_portfolio_trades():
 def create_sample_order_book(ticker: str, num_orders: int = 10000):
     import random
 
-    order_book = trading_system.load_order_book(ticker=ticker)
+    order_book = trading_system.order_book_manager.load_order_book(ticker=ticker)
     base_price = 100
 
     for i in range(num_orders):

@@ -1,11 +1,11 @@
 import logging
 import pickle
 import redis
-import numpy as np
-from trading_system.matching_engine import MatchingEngine
-from trading_system.order_book import OrderBook, Order
-from trading_system.portfolio import Portfolio
-from trading_system.market_data_fetcher import MarketDataFetcher
+from matching_engine import MatchingEngine
+from order_book import OrderBook, Order
+from portfolio import Portfolio
+from market_data_fetcher import MarketDataFetcher
+from order_book_simulator import OrderBookSimulator
 
 
 class RedisRepository:
@@ -16,8 +16,8 @@ class RedisRepository:
         try:
             self.redis.ping()
             self.logger.info("CONNECTED TO REDIS")
-        except:
-            raise Exception("REDIS CONNECTION FAILED")
+        except Exception as e:
+            raise Exception(f"REDIS CONNECTION FAILED: {e}")
 
     def save(self, key: str, data: any) -> None:
         """
@@ -168,50 +168,6 @@ class MarketDataManager:
             self.add_data_fetcher(ticker)
         return self.data_fetchers[ticker].get_data()
 
-class OrderSimulator:
-    def __init__(self, order_book_manager: OrderBookManager):
-        self.book_manager = order_book_manager
-        self.data_fetchers = {}
-
-    def create_market_data_fetchers(self, ticker: str):
-        if ticker not in self.data_fetchers:
-            self.data_fetchers[ticker] = MarketDataFetcher(ticker=ticker)
-        return self.data_fetchers[ticker]
-
-    def simulate_orders(self, ticker: str, batch_size: int, quantity_range: int):
-        """
-        Uses estimated spreads and current prices from current market data to create synthetic orders.
-        batch_size: The amount of orders to add for bid and ask
-        quantity_range: The range of quantities per order
-        """
-        order_book = self.book_manager.load_order_book(ticker=ticker)
-        fetcher = self.create_market_data_fetchers(ticker=ticker)
-
-        base_price, spread = fetcher.get_data()
-
-        for i in range(batch_size):
-            bid_order = Order(ticker=ticker,
-                              side="bid",
-                              portfolio_id="synthetic",
-                              order_id=f"synthetic_bid_{ticker}_{len(order_book.order_id_map)}_{i}",
-                              order_kind="limit",
-                              quantity=np.random.randint(1, quantity_range),
-                              order_price=base_price - np.random.uniform(0, spread / 2)
-                              )
-
-            order_book.add_order(order=bid_order)
-
-        for i in range(batch_size):
-            ask_order = Order(ticker=ticker,
-                              side="ask",
-                              portfolio_id="synthetic",
-                              order_id=f"synthetic_ask_{ticker}_{len(order_book.order_id_map)}_{i}",
-                              order_kind="limit",
-                              quantity=np.random.randint(1, quantity_range),
-                              order_price=base_price + np.random.uniform(0, spread / 2)
-                              )
-
-            order_book.add_order(order=ask_order)
 
 class TradeProcessor:
     def __init__(self,
@@ -274,45 +230,41 @@ class TradeProcessor:
             logging.error(f"FAILED TO PROCESS TRADE REQUESTS FOR PORTFOLIO {portfolio_id}: {e}")
 
 
-
 class TradingSystem:
+    """
+    Main system that coordinates managers and simulators
+    """
+
     def __init__(self):
         self.repository = RedisRepository()
         self.order_book_manager = OrderBookManager(self.repository)
         self.portfolio_manager = PortfolioManager(self.repository)
         self.matching_engine = MatchingEngine()
 
-        # The new focused services
-        self.order_simulator = OrderSimulator(self.order_book_manager)
         self.trade_processor = TradeProcessor(
             self.order_book_manager,
             self.portfolio_manager,
             self.matching_engine
         )
 
-    def submit_order(self, ticker: str, order_data: dict):
-        """
-        Submit order to an order book.
-        Orders are not associated with any portfolio
-        """
-        order_book = self.order_book_manager.load_order_book(ticker)
+    def __del__(self):
+        self.save_all()
 
-        order = Order(**order_data)
-        self.matching_engine.process_order(order, order_book)
+    def create_order_book_simulator(self, ticker: str):
+        """
+        Creates and returns an order book simulator of a given ticker.
+        """
+        return OrderBookSimulator(order_book=self.order_book_manager.load_order_book(ticker=ticker))
 
-        return {"status": "processed"}
+    def save_all(self):
+        """
+        Save all order books and portfolios in memory
+        """
+        for ticker in self.order_book_manager.order_books:
+            self.order_book_manager.save_order_book(ticker=ticker)
 
-    def simulate_orders(self, ticker: str, batch_size: int, quantity_range: int):
-        """
-        Add simulated orders to an order book using OrderSimulator.
-        """
-        return self.order_simulator.simulate_orders(ticker, batch_size, quantity_range)
-
-    def process_trade_request(self, portfolio_id: str):
-        """
-        Process trade requests in a given portfolio.
-        """
-        return self.trade_processor.process_trade_request(portfolio_id)
+        for portfolio_id in self.portfolio_manager.portfolios:
+            self.portfolio_manager.save_portfolio(portfolio_id=portfolio_id)
 
 
 class OrderBookError(Exception):
