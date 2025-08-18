@@ -2,6 +2,7 @@ from typing import Literal, Optional
 from trading_system.trade import PositionRequest
 from datetime import datetime
 from collections import deque
+import logging
 
 
 class Position:
@@ -28,6 +29,7 @@ class Portfolio:
         self.position_trade_history = []
         self.max_position_size = 0.9
         self.trade_requests = deque([])  # Stores positions needed to be fulfilled by trading system
+        self.logger = logging.getLogger(__name__)
 
     @property
     def total_market_value(self):
@@ -45,11 +47,14 @@ class Portfolio:
     def buying_power(self):
         return max(0, self.cash)
 
-    def can_afford_position(self, quantity: float, price: float) -> bool:
+    def can_afford_position(self, quantity: float, price: float):
         """
         Check if there is enough cash available in portfolio.
         Makes sure portfolio value is no zero.
         """
+        if quantity < 0 or price < 0:
+            return False
+
         position_value = quantity * price
         commission = position_value * self.commission_rate
         total_cost = position_value + commission
@@ -79,10 +84,51 @@ class Portfolio:
         position_type = "long" if position_trade.side == "bid" else "short"
 
         if not self.can_afford_position(quantity=position_trade.quantity,
-                                        price=position_trade.price):
-            raise InvalidPosition("INVALID POSITION")
+                                        price=position_trade.price,
+                                        ):
+            self.logger.error(f"INVALID POSITION REQUEST FOR {position_trade.trade_id}")
+            return False
 
         position_value = position_trade.quantity * position_trade.price
+
+        # Create or update position
+        try:
+            if position_trade.ticker in self.positions:
+                existing = self.positions[position_trade.ticker]
+
+                # Average out positions if position types are the same
+                if existing.position_type == position_type:
+                    total_quantity = existing.quantity + position_trade.quantity
+                    weighted_price = (
+                            (existing.entry_price * existing.quantity + position_trade.price * position_trade.quantity)
+                            / total_quantity
+                    )
+                    existing.quantity = total_quantity
+                    existing.entry_price = weighted_price
+                else:
+                    # Net out or reverse
+                    total_quantity = existing.quantity - position_trade.quantity
+                    if total_quantity > 0:
+                        existing.quantity = total_quantity
+                    elif total_quantity < 0:
+                        existing.quantity = abs(total_quantity)
+                        existing.position_type = position_type  # Change position type
+                        existing.entry_price = position_trade.price  # New entry price for reversed position
+                    else:
+                        delete_position = True
+            else:
+                # Create new position
+                new_position = Position(
+                    ticker=position_trade.ticker,
+                    position_type=position_type,
+                    entry_price=position_trade.price,
+                    quantity=position_trade.quantity,
+                    take_profit=0
+                )
+                self.positions[position_trade.ticker] = new_position
+        except Exception as e:
+            self.logger.error(f"FAILED TO UPDATE POSTIONS: {e}")
+            return
 
         # Update cash
         if position_type == "long":
@@ -90,43 +136,11 @@ class Portfolio:
         else:  # short position
             self.cash += (position_value - position_trade.commission)
 
-        # Create or update position
-        if position_trade.ticker in self.positions:
-            existing = self.positions[position_trade.ticker]
-
-            # Average out positions if position types are the same
-            if existing.position_type == position_type:
-                total_quantity = existing.quantity + position_trade.quantity
-                weighted_price = (
-                        (existing.entry_price * existing.quantity + position_trade.price * position_trade.quantity)
-                        / total_quantity
-                )
-                existing.quantity = total_quantity
-                existing.entry_price = weighted_price
-            else:
-                # Net out or reverse
-                total_quantity = existing.quantity - position_trade.quantity
-                if total_quantity > 0:
-                    existing.quantity = total_quantity
-                elif total_quantity < 0:
-                    existing.quantity = abs(total_quantity)
-                    existing.position_type = position_type  # Change position type
-                    existing.entry_price = position_trade.price  # New entry price for reversed position
-                else:
-                    delete_position = True
-        else:
-            # Create new position
-            new_position = Position(
-                ticker=position_trade.ticker,
-                position_type=position_type,
-                entry_price=position_trade.price,
-                quantity=position_trade.quantity,
-                take_profit=0
-            )
-            self.positions[position_trade.ticker] = new_position
-
         if delete_position:
             del self.positions[position_trade.ticker]
+
+        self.logger.info(f"POSITION REQUEST {position_trade.trade_id} COMPLETED")
+        return True
 
     def close_position(self, ticker: str, quantity: Optional[float] = None):
         """
@@ -144,8 +158,18 @@ class Portfolio:
         if close_quantity > position.quantity:
             return False
 
-        proceeds = close_quantity * position.current_price
-        commission = proceeds * self.commission_rate
+        proceeds = close_quantity * position.current_price # ADD LATER: GET CURRENT PRICE OF STOCK
+        commission = proceeds * self.commission_rate       # USING MARKET DATA
+
+        # Update position
+        try:
+            if close_quantity == position.quantity:
+                del self.positions[ticker]
+            else:
+                position.quantity -= close_quantity
+        except Exception as e:
+            self.logger.error(f"FAILED TO UPDATE POSITION {ticker}: {e}")
+            return False
 
         # Update cash
         if position.position_type == "long":
@@ -153,12 +177,7 @@ class Portfolio:
         else:
             self.cash -= (proceeds + commission)
 
-        # Update position
-        if close_quantity == position.quantity:
-            del self.positions[ticker]
-        else:
-            position.quantity -= close_quantity
-
+        self.logger.info(f"POSITION {ticker} UPDATED SUCCESSFULLY")
         return True
 
     def create_position_request(self,
