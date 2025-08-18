@@ -1,4 +1,22 @@
-from trading_system.trade import OrderBookTrade
+from typing import Literal
+from datetime import datetime
+
+
+class OrderBookTrade:
+    def __init__(self, trade_id: str,
+                 buyer_order_id: str,
+                 seller_order_id: str,
+                 price: float,
+                 quantity: int,
+                 instrument: Literal["option", "future", "stock", "swap"]):
+        self.trade_id = trade_id
+        self.buyer_order_id = buyer_order_id
+        self.seller_order_id = seller_order_id
+        self.quantity = quantity
+        self.price = price
+        self.instrument = instrument
+        self.timestamp = datetime.now()
+
 
 class MatchingEngine:
 
@@ -93,11 +111,11 @@ class MatchingEngine:
             order_book.cancel_order(order_id=sell_order.order_id)
 
         trade = OrderBookTrade(trade_id=str(len(order_book.trades)),
-                      buyer_order_id=buy_order.order_id,
-                      seller_order_id=sell_order.order_id,
-                      price=trade_price,
-                      quantity=trade_quantity,
-                      instrument="stock")
+                               buyer_order_id=buy_order.order_id,
+                               seller_order_id=sell_order.order_id,
+                               price=trade_price,
+                               quantity=trade_quantity,
+                               instrument="stock")
 
         return trade
 

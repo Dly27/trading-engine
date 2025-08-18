@@ -1,4 +1,4 @@
-import time
+from datetime import datetime
 from typing import Literal
 from trading_system.red_black_tree import RedBlackTree, EmptyBookError
 from pathlib import Path
@@ -19,7 +19,7 @@ class Order:
         self.order_id = order_id
         self.order_price = order_price
         self.quantity = quantity
-        self.timestamp = time.time()
+        self.timestamp = datetime.now()
         self.ticker = ticker
         self.portfolio_id = portfolio_id
 
