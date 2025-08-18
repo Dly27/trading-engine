@@ -55,9 +55,19 @@ class OrderBookSimulator:
         self.quantity_range = 100
         self.intervals = 5
 
-    async def start(self):
+    def run(self):
         """
-        Start the order book simulation.
+        Start the simulation.
+        Used by user.
+        """
+        try:
+            asyncio.run(self.start_simulation_loop())
+        except KeyboardInterrupt:
+            self.logger.info("SIMULATION STOPPED BY USER")
+
+    async def start_simulation_loop(self):
+        """
+        Start the order book simulation loop.
         """
         if self.running:
             self.logger.warning("SIMULATION ALREADY RUNNING.")

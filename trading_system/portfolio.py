@@ -1,5 +1,5 @@
 from typing import Literal, Optional
-from trade import PositionRequest
+from trading_system.trade import PositionRequest
 from datetime import datetime
 from collections import deque
 

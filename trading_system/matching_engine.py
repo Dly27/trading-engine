@@ -1,5 +1,4 @@
-from trade import OrderBookTrade
-
+from trading_system.trade import OrderBookTrade
 
 class MatchingEngine:
 

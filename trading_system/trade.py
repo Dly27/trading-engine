@@ -1,4 +1,4 @@
-import time
+from datetime import datetime
 from typing import Literal
 import datetime
 
@@ -16,7 +16,7 @@ class OrderBookTrade:
         self.quantity = quantity
         self.price = price
         self.instrument = instrument
-        self.timestamp = time.time()
+        self.timestamp = datetime.now()
 
 
 class PositionRequest:
@@ -26,7 +26,7 @@ class PositionRequest:
                  side: Literal["bid", "ask"],
                  quantity: float,
                  price: float,
-                 timestamp: datetime,
+                 timestamp: datetime.datetime,
                  commission: float,
                  close_open: Literal["close", "open"]
                  ):

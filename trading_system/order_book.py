@@ -1,6 +1,6 @@
 import time
 from typing import Literal
-from red_black_tree import RedBlackTree, EmptyBookError
+from trading_system.red_black_tree import RedBlackTree, EmptyBookError
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent

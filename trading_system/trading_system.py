@@ -1,11 +1,11 @@
 import logging
 import pickle
 import redis
-from matching_engine import MatchingEngine
-from order_book import OrderBook, Order
-from portfolio import Portfolio
-from market_data_fetcher import MarketDataFetcher
-from order_book_simulator import OrderBookSimulator
+from trading_system.matching_engine import MatchingEngine
+from trading_system.order_book import OrderBook, Order
+from trading_system.portfolio import Portfolio
+from trading_system.market_data_fetcher import MarketDataFetcher
+from trading_system.order_book_simulator import OrderBookSimulator
 
 
 class RedisRepository:
