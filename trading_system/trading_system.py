@@ -21,7 +21,7 @@ class RedisRepository:
 
     def save(self, key: str, data: any) -> None:
         """
-        Serialised object then saves data to redis
+        Serialises object then saves data to redis
         """
         try:
             serialized = pickle.dumps(data)
@@ -258,7 +258,7 @@ class TradingSystem:
 
     def save_all(self):
         """
-        Save all order books and portfolios in memory
+        Save all order books and portfolios from memory into redis
         """
         for ticker in self.order_book_manager.order_books:
             self.order_book_manager.save_order_book(ticker=ticker)
