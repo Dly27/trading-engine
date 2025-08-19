@@ -116,7 +116,7 @@ class MarketDataFetcher:
         self.update()
 
         if self.current_price is None:
-            logger.warning(f"NO CURRENT PRICE AVAILABLE FOR {self.ticker}")
+            logger.warning(f"NO CURRENT PRICE AVAILABLE FOR {self.symbol}")
             return None
 
         return self.current_price, self.current_spread

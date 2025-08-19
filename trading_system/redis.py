@@ -11,9 +11,10 @@ class RedisRepository:
             self.redis.ping()
             self.logger.info("CONNECTED TO REDIS")
         except Exception as e:
-            raise Exception(f"REDIS CONNECTION FAILED: {e}")
+            self.logger.error(f"FAILED TO CONNECT TO REDIS: {e}")
+            raise
 
-    def save(self, key: str, data: any) -> None:
+    def save(self, key: str, data: any):
         """
         Serialises object then saves data to redis
         """
@@ -23,9 +24,8 @@ class RedisRepository:
             self.logger.info(f"SAVED {key} TO REDIS")
         except Exception as e:
             self.logger.error(f"FAILED TO SAVE {key} TO REDIS: {e}")
-            raise
 
-    def load(self, key: str) -> any:
+    def load(self, key: str):
         """
         Load data from redis then serialise into an object
         """
@@ -35,7 +35,5 @@ class RedisRepository:
                 result = pickle.loads(data)
                 self.logger.info(f"LOADED {key} FROM REDIS")
                 return result
-            return None
         except Exception as e:
             self.logger.warning(f"CORRUPTED DATA FOR {key}, RETURNING NONE: {e}")
-            return None

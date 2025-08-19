@@ -6,7 +6,6 @@ from trading_system.order_book import Order
 from trading_system.portfolio import Position
 
 
-
 class OrderRequest(BaseModel):
     ticker: str
     side: str
@@ -65,44 +64,6 @@ def get_order_book(ticker: str):
     }
 
 
-@app.post("/portfolio/{portfolio_id}/orders")
-def submit_order(portfolio_id: str, order_request: OrderRequest):
-    try:
-        # Load order book based on request ticker
-        order_book = trading_system.order_book_manager.load_order_book(order_request.ticker)
-
-        # Create order
-        order_id = f"{portfolio_id}_{len(order_book.order_id_map)}"
-        order = Order(
-            order_id=order_id,
-            ticker=order_request.ticker,
-            side=order_request.side,
-            order_price=order_request.order_price,
-            quantity=order_request.quantity,
-            portfolio_id=portfolio_id,
-            order_kind=order_request.order_kind
-        )
-
-        # Find a match for order
-        original_quantity = order.quantity
-        trading_system.matching_engine.process_order(order=order, order_book=order_book)
-        quantity_executed = original_quantity - order.quantity
-
-        return {
-            "order_id": order_id,
-            "status": "submitted",
-            "original_quantity": original_quantity,
-            "quantity_executed": quantity_executed,
-            "quantity_remaining": order.quantity,
-        }
-
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"FAILED TO SUBMIT ORDER: {str(e)}"
-        )
-
-
 @app.post("/portfolio/{portfolio_id}/trade-requests")
 def portfolio_trade_request(portfolio_id: str, trade_request: TradeRequest):
     try:
@@ -127,6 +88,7 @@ def portfolio_trade_request(portfolio_id: str, trade_request: TradeRequest):
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
                             detail=f"PORTFOLIO FAILED TO REQUEST TRADE: {e}")
+
 
 @app.post("/portfolio/{portfolio_id}/process-trades")
 def process_portfolio_trade_requests(portfolio_id: str):
@@ -158,6 +120,8 @@ def process_portfolio_trade_requests(portfolio_id: str):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"FAILED TO PROCESS PORTFOLIO {portfolio_id} TRADE REQUESTS: {str(e)}"
         )
+
+
 @app.post("/system/process-all-trades")
 def process_all_portfolio_trades():
     try:
@@ -192,7 +156,8 @@ def process_all_portfolio_trades():
 
         return {
             "fully_processed_portfolios": fully_processed_portfolio_count,
-            "partially_processed_portfolios": len(trading_system.portfolio_manager.portfolios) - fully_processed_portfolio_count,
+            "partially_processed_portfolios": len(
+                trading_system.portfolio_manager.portfolios) - fully_processed_portfolio_count,
             "total_requests_processed": total_processed_requests,
             "portfolio_results": results,
         }

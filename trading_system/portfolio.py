@@ -55,6 +55,17 @@ class Portfolio:
     def buying_power(self):
         return max(0, self.cash)
 
+    @property
+    def total_portfolio_value(self):
+        """
+        TEMPORARY PROPERTY.
+        NEED TO IMPLEMENT LIVE MARKET PRICES.
+        """
+        portfolio_value = 0
+        for position in self.positions.values():
+            portfolio_value += position.quantity * position.entry_price
+        return self.cash + portfolio_value
+
     def create_position_request(self,
                                 ticker: str,
                                 position_type: Literal["long", "short"],

@@ -53,7 +53,7 @@ class OrderBookSimulator:
         self.simulation_task = None
         self.batch_size = 5
         self.quantity_range = 100
-        self.intervals = 5
+        self.intervals = 1
 
     def run(self):
         """
@@ -123,9 +123,10 @@ class OrderBookSimulator:
             best_ask = self.order_book.get_best_ask()
             spread = self.order_book.get_spread()
 
-            print(f"Best Bid: {best_bid.order_price}" if best_bid else "Best Bid: None")
-            print(f"Best Ask: {best_ask.order_price}" if best_ask else "Best Ask: None")
-            print(f"Spread: {spread}" if spread else "Spread: None")
+            print({"ticker": self.ticker,
+                   "best_ask": best_ask.order_price,
+                   "best_bid": best_bid.order_price,
+                   "spread": spread})
 
         except Exception as e:
             self.logger.error(f"FAILED TO PRINT ORDERBOOK INFO: {e}")

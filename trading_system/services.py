@@ -1,7 +1,7 @@
 import logging
 from typing import Optional
-from portfolio import Portfolio, PositionRequest, Position
-from trading_system import MatchingEngine
+from trading_system.portfolio import Portfolio, PositionRequest, Position
+from trading_system.matching_engine import MatchingEngine
 from trading_system.managers import OrderBookManager, PortfolioManager
 from trading_system.order_book import Order
 
@@ -188,7 +188,7 @@ class TradeService:
             self.portfolio_service.open_position(portfolio=portfolio, position_trade=position_request)
         else:
             current_price = self.get_current_market_price(ticker=ticker)
-            self.portfolio_service.close_position(portfolio=portfolio, current_price=current_price)
+            self.portfolio_service.close_position(ticker=ticker, portfolio=portfolio, current_price=current_price)
         self.logger.info(f"TRADE {portfolio.portfolio_id}_{position_request.trade_id} EXECUTED")
 
     def process_trade_request(self, portfolio_id: str):

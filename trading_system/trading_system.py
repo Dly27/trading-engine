@@ -31,6 +31,12 @@ class TradingSystem:
         """
         return OrderBookSimulator(order_book=self.order_book_manager.load_order_book(ticker=ticker))
 
+    def process_trade_request(self, portfolio_id: str):
+        """
+        Process trade requests in a given portfolio.
+        """
+        return self.trade_processor.process_trade_request(portfolio_id)
+
     def save_all(self):
         """
         Save all order books and portfolios from memory into redis
@@ -40,7 +46,3 @@ class TradingSystem:
 
         for portfolio_id in self.portfolio_manager.portfolios:
             self.portfolio_manager.save_portfolio(portfolio_id=portfolio_id)
-
-
-class OrderBookError(Exception):
-    pass
