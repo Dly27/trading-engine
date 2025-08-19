@@ -67,6 +67,12 @@ class MarketDataFetcher:
         try:
             # Update the prices
             new_price = float(self.ticker.fast_info["last_price"])
+
+            if self.current_price == new_price:
+                print("REQUEST FAILED")
+            else:
+                print("REQUEST SUCCESSFUL")
+
             self.previous_price = self.current_price
             self.current_price = new_price
 

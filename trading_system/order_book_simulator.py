@@ -53,7 +53,7 @@ class OrderBookSimulator:
         self.simulation_task = None
         self.batch_size = 5
         self.quantity_range = 100
-        self.intervals = 1
+        self.intervals = 5
 
     def run(self):
         """
@@ -94,7 +94,7 @@ class OrderBookSimulator:
         while self.running:
             try:
                 await self.add_orders()
-                self.print_orderbook_info()
+                # self.print_orderbook_info()
                 await asyncio.sleep(self.intervals)
             except Exception as e:
                 self.logger.error(f"SIMULATION LOOP ERROR: {e}")
